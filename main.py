@@ -380,14 +380,15 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
                 description=(
                     "Controls the 6-leg ESP32 hexapod robot over Bluetooth (broadcast name: 'hexapod'). "
                     "Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow'. "
-                    "Can also adjust individual leg joints by specifying leg_name ('FL', 'ML', 'RL', 'FR', 'MR', 'RR'), joint_name ('coxa', 'femur', 'tibia'), and angle (0-180)."
+                    "Can also adjust individual leg joints (leg_name: 'FL', 'ML', 'RL', 'FR', 'MR', 'RR', joint_name: 'coxa', 'femur', 'tibia') "
+                    "or set 3D Inverse Kinematics (IK) foot position (x, y, z in mm)."
                 ),
                 parameters={
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
-                            "description": "Motion preset or action to perform: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_joint'."
+                            "description": "Motion preset or action to perform: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_joint', 'set_ik'."
                         },
                         "leg_name": {
                             "type": "string",
@@ -400,6 +401,22 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
                         "angle": {
                             "type": "integer",
                             "description": "Target angle in degrees (0-180)."
+                        },
+                        "x": {
+                            "type": "number",
+                            "description": "Cartesian X offset in mm for Inverse Kinematics foot position."
+                        },
+                        "y": {
+                            "type": "number",
+                            "description": "Cartesian Y offset in mm for Inverse Kinematics foot position."
+                        },
+                        "z": {
+                            "type": "number",
+                            "description": "Cartesian Z offset in mm for Inverse Kinematics foot position."
+                        },
+                        "duration": {
+                            "type": "integer",
+                            "description": "Trajectory move duration in milliseconds (default 200)."
                         }
                     },
                     "required": ["action"]
@@ -502,14 +519,15 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
                 "Controls a 6 degrees of freedom (6-DOF) Robot Arm connected to an ESP32 via a PCA9685 servo driver. "
                 "Allows triggering gestures ('yes', 'no', 'high_five', 'wave', 'bow', 'dance'), "
                 "executing preset demonstration motions ('home', 'rest', 'reach', 'pick_and_place', 'open_gripper', 'close_gripper', 'stop'), "
-                "or setting individual joint angles (channel 0: Base/Waist, 1: Shoulder, 2: Elbow, 3: Wrist Pitch, 4: Wrist Roll, 5: Gripper) from 0 to 180 degrees."
+                "setting individual joint angles (channel 0: Base, 1: Shoulder, 2: Elbow, 3: Wrist Pitch, 4: Wrist Roll, 5: Gripper), "
+                "or positioning the arm end-effector via 3D Inverse Kinematics (IK) coordinates (x, y, z in mm, pitch, roll, claw)."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "description": "Gesture or preset motion: 'yes', 'no', 'high_five', 'wave', 'bow', 'dance', 'home', 'rest', 'reach', 'pick_and_place', 'open_gripper', 'close_gripper', 'stop'."
+                        "description": "Gesture or preset motion: 'yes', 'no', 'high_five', 'wave', 'bow', 'dance', 'home', 'rest', 'reach', 'pick_and_place', 'open_gripper', 'close_gripper', 'stop', 'move_ik'."
                     },
                     "channel": {
                         "type": "integer",
@@ -518,6 +536,34 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
                     "angle": {
                         "type": "integer",
                         "description": "Target angle in degrees (0 to 180)."
+                    },
+                    "x": {
+                        "type": "number",
+                        "description": "Cartesian X coordinate in mm for end-effector IK position."
+                    },
+                    "y": {
+                        "type": "number",
+                        "description": "Cartesian Y coordinate in mm for end-effector IK position."
+                    },
+                    "z": {
+                        "type": "number",
+                        "description": "Cartesian Z coordinate in mm for end-effector IK position."
+                    },
+                    "pitch": {
+                        "type": "number",
+                        "description": "Wrist pitch angle in degrees (default 0)."
+                    },
+                    "roll": {
+                        "type": "number",
+                        "description": "Wrist roll angle in degrees (0-180, default 90)."
+                    },
+                    "claw": {
+                        "type": "number",
+                        "description": "Gripper claw opening angle in degrees (0-180, default 40)."
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "description": "Trajectory move duration in milliseconds (default 250)."
                     }
                 }
             }
@@ -938,6 +984,14 @@ class HexapodController:
             return {"status": "success", "leg": leg_code, "joint": joint, "angle": angle}
         return {"status": "error", "message": f"Invalid leg '{leg_code}' or joint '{joint}'"}
 
+    def move_leg_ik(self, leg_code: str, x: float, y: float, z: float, duration_ms: int = 200) -> dict:
+        leg_code = leg_code.upper()
+        if leg_code in self.LEGS:
+            cmd = f"HEX:IK:{leg_code}:{x}:{y}:{z}:{duration_ms}\r\n"
+            self.send_bt_command(cmd)
+            return {"status": "success", "leg": leg_code, "x": x, "y": y, "z": z, "duration": duration_ms}
+        return {"status": "error", "message": f"Invalid leg code '{leg_code}'"}
+
     def stop_current_motion(self):
         self.stop_motion_flag = True
         if self.motion_thread and self.motion_thread.is_alive():
@@ -1189,15 +1243,42 @@ class RobotArmController:
             self.gui_window.update_arm_joint_slider(channel, angle)
         return res
 
+    def move_arm_ik(self, x: float, y: float, z: float, pitch: float = 0, roll: float = 90, claw: float = 40, duration_ms: int = 250) -> dict:
+        cmd_str = f"ARM:IK:{x}:{y}:{z}:{pitch}:{roll}:{claw}:{duration_ms}\r\n"
+        if self.audio_loop and self.audio_loop.serial_arm and self.audio_loop.serial_arm.is_open:
+            try:
+                self.audio_loop.serial_arm.write(cmd_str.encode("utf-8"))
+                self.audio_loop.serial_arm.flush()
+                print(f"[Robot Arm IK Sent] {cmd_str.strip()}")
+                return {"status": "success", "x": x, "y": y, "z": z, "pitch": pitch, "roll": roll, "claw": claw, "duration": duration_ms}
+            except Exception as e:
+                print(f"[Robot Arm IK Error] {e}")
+        print(f"[Simulated Robot Arm IK] {cmd_str.strip()}")
+        return {"status": "success", "simulated": True, "x": x, "y": y, "z": z, "pitch": pitch, "roll": roll, "claw": claw}
+
     def stop_current_motion(self):
         self.stop_motion_flag = True
         if self.motion_thread and self.motion_thread.is_alive():
             self.motion_thread.join(timeout=0.5)
         self.stop_motion_flag = False
 
+    def send_arm_hardware_command(self, cmd_str: str):
+        if self.audio_loop and self.audio_loop.serial_arm and self.audio_loop.serial_arm.is_open:
+            try:
+                self.audio_loop.serial_arm.write(f"{cmd_str}\r\n".encode("utf-8"))
+                self.audio_loop.serial_arm.flush()
+                print(f"[Robot Arm HW Sent] {cmd_str.strip()}")
+            except Exception as e:
+                print(f"[Robot Arm HW Error] {e}")
+        else:
+            print(f"[Simulated Robot Arm HW] {cmd_str.strip()}")
+
     def execute_action(self, action_name: str) -> dict:
         action = action_name.lower().replace(" ", "_")
         self.stop_current_motion()
+
+        # Send direct hardware command to ESP32 Firmware for hardware-interpolated execution
+        self.send_arm_hardware_command(f"ARM:{action}")
 
         if action in ("home", "rest", "reach", "open_gripper", "close_gripper"):
             self.current_motion = action
@@ -2888,16 +2969,53 @@ class AudioLoop:
                                         id=fc.id
                                     )
                                 )
+                            elif fc.name == "control_hexapod":
+                                action = fc.args.get("action")
+                                leg_name = fc.args.get("leg_name")
+                                joint_name = fc.args.get("joint_name")
+                                angle = fc.args.get("angle")
+                                x = fc.args.get("x")
+                                y = fc.args.get("y")
+                                z = fc.args.get("z")
+                                duration = fc.args.get("duration", 200)
+
+                                if action == "set_ik" or (leg_name and x is not None and y is not None and z is not None):
+                                    result = await asyncio.to_thread(self.hexapod.move_leg_ik, leg_name, x, y, z, duration)
+                                elif action == "set_joint" or (leg_name and joint_name and angle is not None):
+                                    result = await asyncio.to_thread(self.hexapod.set_joint_angle, leg_name, joint_name, angle)
+                                elif action:
+                                    result = await asyncio.to_thread(self.hexapod.execute_action, action)
+                                else:
+                                    result = {"status": "error", "message": "Specify action, set_joint (leg+joint+angle), or set_ik (leg+x+y+z)"}
+
+                                function_responses.append(
+                                    types.FunctionResponse(
+                                        name=fc.name,
+                                        response=result,
+                                        id=fc.id
+                                    )
+                                )
                             elif fc.name == "control_robot_arm":
                                 action = fc.args.get("action")
                                 channel = fc.args.get("channel")
                                 angle = fc.args.get("angle")
-                                if action:
+                                x = fc.args.get("x")
+                                y = fc.args.get("y")
+                                z = fc.args.get("z")
+                                pitch = fc.args.get("pitch", 0)
+                                roll = fc.args.get("roll", 90)
+                                claw = fc.args.get("claw", 40)
+                                duration = fc.args.get("duration", 250)
+
+                                if action == "move_ik" or (x is not None and y is not None and z is not None):
+                                    result = await asyncio.to_thread(self.robot_arm.move_arm_ik, x, y, z, pitch, roll, claw, duration)
+                                elif action:
                                     result = await asyncio.to_thread(self.robot_arm.execute_action, action)
                                 elif channel is not None and angle is not None:
                                     result = await asyncio.to_thread(self.robot_arm.set_joint_angle, channel, angle)
                                 else:
-                                    result = {"status": "error", "message": "Specify action or channel+angle"}
+                                    result = {"status": "error", "message": "Specify action, channel+angle, or x+y+z IK coordinates"}
+
                                 function_responses.append(
                                     types.FunctionResponse(
                                         name=fc.name,
