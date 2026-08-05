@@ -89,6 +89,8 @@ For detailed GitHub step-by-step instructions, see [`GITHUB_SETUP.md`](file:///c
 
 ```
 Shobots/
+├── esp32_arm/
+│   └── esp32_arm.ino           # ESP32 6-DOF Robot Arm firmware (3D IK & Trajectory Interpolation)
 ├── esp32_hexapod/
 │   └── esp32_hexapod.ino       # ESP32 6-Leg Hexapod firmware (IK & Trajectory Interpolation)
 ├── esp32_led/
