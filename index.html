@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shobots Controller - Multimodal AI Robotics Dashboard</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  <!-- MediaPipe Hands -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-glow"></div>
+        <i class="fa-solid fa-wand-magic-sparkles brand-icon"></i>
+        <h1>Gemini <span class="accent-text">Live</span></h1>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem; margin-left: auto;">
+        <button type="button" id="header-open-led-btn" class="text-btn action-header-pulse" title="Launch Fullscreen ESP32 LED Pulse Screen">
+          <i class="fa-solid fa-lightbulb" style="color: #38bdf8;"></i> Launch ESP32 LED Screen (1-10 Buttons)
+        </button>
+        <div class="status-badge disconnected" id="connection-status">
+          <span class="status-dot"></span>
+          <span id="status-text">Disconnected</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="app-grid">
+      <!-- Left Column: Config & Controls -->
+      <section class="left-column">
+        <!-- ESP32 LED Control Card (Top Priority) -->
+        <div class="card glass-card" id="led-card">
+          <div class="card-header">
+            <div class="header-left" style="display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-lightbulb"></i>
+              <h2>ESP32 LED Control</h2>
+            </div>
+            <div class="led-status-badge disconnected" id="led-status-badge">
+              <span class="status-dot" id="led-dot"></span>
+              <span id="led-status-text">OFF</span>
+            </div>
+          </div>
+          <div class="card-body led-body">
+            <!-- COM Port Select Dropdown Bar -->
+            <div class="com-port-bar">
+              <label for="serial-port-select" class="com-port-label">
+                <i class="fa-solid fa-microchip"></i> ESP32 COM Port
+              </label>
+              <div class="com-port-controls">
+                <select id="serial-port-select" class="select-com-port">
+                  <option value="">Select COM Port...</option>
+                  <option value="request_new">+ Add/Scan COM Port...</option>
+                </select>
+                <button type="button" id="serial-connect-btn" class="text-btn btn-small action-connect-port" title="Connect Selected ESP32 COM Port">
+                  <i class="fa-solid fa-plug"></i> Connect
+                </button>
+              </div>
+            </div>
+
+            <!-- Virtual LED Visualizer Widget -->
+            <div class="virtual-led-container">
+              <div class="virtual-led-display">
+                <div class="virtual-led-bulb" id="virtual-led">
+                  <i class="fa-solid fa-bolt led-icon"></i>
+                </div>
+                <div class="led-pulse-ring" id="pulse-ring"></div>
+              </div>
+              <div class="led-info">
+                <span class="led-title">ESP32 Onboard LED (GPIO 2)</span>
+                <span class="led-sub" id="led-pulse-status">Ready for pulse command</span>
+              </div>
+            </div>
+
+            <!-- Pulse Buttons Grid 1 to 10 -->
+            <div class="pulse-section">
+              <label class="pulse-grid-label">
+                <i class="fa-solid fa-hand-pointer"></i> Select Pulse Count (1 - 10 Times)
+              </label>
+              <div class="pulse-buttons-grid">
+                <button type="button" class="pulse-btn" data-count="1" title="Pulse 1 time">
+                  <span class="btn-num">1</span>
+                  <span class="btn-lbl">Pulse</span>
+                </button>
+                <button type="button" class="pulse-btn" data-count="2" title="Pulse 2 times">
+                  <span class="btn-num">2</span>
+                  <span class="btn-lbl">Pulses</span>
+                </button>
+                <button type="button" class="pulse-btn" data-count="3" title="Pulse 3 times">
+                  <span class="btn-num">3</span>
+                  <span class="btn-lbl">Pulses</span>
+                </button>
+                <button type="button" class="pulse-btn" data-count="4" title="Pulse 4 times">
+                  <span class="btn-num">4</span>
+                  <span class="btn-lbl">Pulses</span>
+                </button>
+                <button type="button" class="pulse-btn" data-count="5" title="Pulse 5 times">
+                  <span class="btn-num">5</span>
+                  <span class="btn-lbl">Pulses</span>
+                </button>
+                <button type="button" class="pulse-btn" data-count="6" title="Pulse 6 times">
+                  <span class="btn-num">6</span>
+                  <span class="btn-lbl">Pulses</span>
+                </button>
+                <button type="button" class="pulse-btn" data-count="7" title="Pulse 7 times">
+                  <span class="btn-num">7</span>
+                  <span class="btn-lbl">Pulses</span>
+                </button>
+                <button type="button" class="pulse-btn" data-count="8" title="Pulse 8 times">
+                  <span class="btn-num">8</span>
+                  <span class="btn-lbl">Pulses</span>
+                </button>
+                <button type="button" class="pulse-btn" data-count="9" title="Pulse 9 times">
+                  <span class="btn-num">9</span>
+                  <span class="btn-lbl">Pulses</span>
+                </button>
+                <button type="button" class="pulse-btn" data-count="10" title="Pulse 10 times">
+                  <span class="btn-num">10</span>
+                  <span class="btn-lbl">Pulses</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Quick Direct Controls -->
+            <div class="led-quick-actions">
+              <button type="button" id="led-on-btn" class="text-btn btn-small action-on">
+                <i class="fa-solid fa-power-off"></i> Turn ON
+              </button>
+              <button type="button" id="led-off-btn" class="text-btn btn-small action-off">
+                <i class="fa-solid fa-circle-xmark"></i> Turn OFF
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Configuration Card -->
+        <div class="card glass-card" id="config-card">
+          <div class="card-header">
+            <i class="fa-solid fa-sliders"></i>
+            <h2>Configuration</h2>
+          </div>
+          
+          <div class="card-body">
+            <div class="input-group">
+              <label for="api-key">Gemini API Key</label>
+              <div class="password-input-wrapper">
+                <input type="password" id="api-key" placeholder="Enter your Gemini API Key..." value="" autocomplete="off">
+                <button type="button" id="toggle-api-key" class="icon-btn" title="Show/Hide API Key">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
+              <p class="helper-text">Your API key is saved locally in your browser and is never sent to any server other than the Google Gemini API endpoint.</p>
+            </div>
+
+            <div class="grid-2-col">
+              <div class="input-group">
+                <label for="model-select">Model</label>
+                <select id="model-select">
+                  <option value="models/gemini-2.0-flash-exp" selected>Gemini 2.0 Flash Exp</option>
+                  <option value="models/gemini-2.5-flash">Gemini 2.5 Flash</option>
+                </select>
+              </div>
+
+              <div class="input-group">
+                <label for="voice-select">Voice</label>
+                <select id="voice-select">
+                  <option value="Puck" selected>Puck (Male)</option>
+                  <option value="Charon">Charon (Deep Male)</option>
+                  <option value="Aoede">Aoede (Female)</option>
+                  <option value="Fenrir">Fenrir (Deep Male Alt)</option>
+                  <option value="Kore">Kore (Female Alt)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="system-instruction">System Instruction</label>
+              <textarea id="system-instruction" placeholder="e.g. You are a helpful assistant. Keep your responses concise and friendly."></textarea>
+            </div>
+
+            <!-- Configuration Pulse LED Button -->
+            <div class="input-group" style="margin-top: 0.75rem;">
+              <button type="button" id="config-pulse-btn" class="text-btn action-config-pulse" title="Pulse the ESP32 LED directly from configuration window">
+                <i class="fa-solid fa-bolt"></i> Pulse ESP32 LED
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Media Panel (Webcam / Screen Share Preview) -->
+        <div class="card glass-card" id="media-card">
+          <div class="card-header">
+            <i class="fa-solid fa-video"></i>
+            <h2>Visual Input Feed</h2>
+            <div id="media-source-label" class="badge hidden">Camera</div>
+          </div>
+          <div class="card-body media-body">
+            <div class="video-container">
+              <video id="local-video" autoplay playsinline muted class="hidden"></video>
+              <div class="video-placeholder" id="video-placeholder">
+                <i class="fa-solid fa-camera-retro placeholder-icon"></i>
+                <p>Visual sharing inactive</p>
+                <span class="placeholder-sub">Enable Camera or Screen Share below to stream visual contexts to Gemini.</span>
+              </div>
+              <canvas id="hidden-canvas" style="display: none;"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Visualizers & Live Transcription Chat -->
+      <section class="right-column">
+        <!-- Interactive Visualizers Card -->
+        <div class="card glass-card" id="visualizer-card">
+          <div class="card-header">
+            <i class="fa-solid fa-chart-simple"></i>
+            <h2>Real-time Audio Streams</h2>
+          </div>
+          <div class="card-body visualizer-body">
+            <div class="visualizers-container">
+              <!-- User Voice Wave -->
+              <div class="visualizer-block">
+                <div class="visualizer-label">
+                  <i class="fa-solid fa-microphone"></i>
+                  <span>Your Microphone</span>
+                </div>
+                <div class="canvas-wrapper">
+                  <canvas id="user-canvas"></canvas>
+                </div>
+              </div>
+
+              <!-- Gemini Voice Wave -->
+              <div class="visualizer-block">
+                <div class="visualizer-label">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i>
+                  <span>Gemini Voice</span>
+                </div>
+                <div class="canvas-wrapper">
+                  <canvas id="gemini-canvas"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat / Transcription Card -->
+        <div class="card glass-card flex-grow-card" id="chat-card">
+          <div class="card-header">
+            <i class="fa-solid fa-comment-dots"></i>
+            <h2>Live Transcription Log</h2>
+            <button id="clear-log" class="text-btn btn-small" title="Clear Chat Log">
+              <i class="fa-solid fa-trash-can"></i> Clear
+            </button>
+          </div>
+          <div class="card-body chat-body" id="chat-log">
+            <!-- System Status Messages -->
+            <div class="system-message">
+              <span class="timestamp">System</span>
+              <p>Welcome! Enter your Gemini API Key, set your preferences, and click "Connect Session" to start the live conversation.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Floating Action Dock -->
+    <footer class="app-dock">
+      <div class="dock-container">
+        <!-- Start/Stop Live Session -->
+        <button id="connect-btn" class="dock-btn action-connect" title="Connect Live Session">
+          <i class="fa-solid fa-phone"></i>
+          <span>Connect Session</span>
+        </button>
+
+        <div class="divider"></div>
+
+        <!-- Mute/Unmute mic -->
+        <button id="mic-toggle" class="dock-btn icon-only" title="Mute Microphone" disabled>
+          <i class="fa-solid fa-microphone"></i>
+        </button>
+
+        <!-- Toggle Webcam -->
+        <button id="camera-toggle" class="dock-btn icon-only" title="Toggle Webcam" disabled>
+          <i class="fa-solid fa-video"></i>
+        </button>
+
+        <!-- Toggle Screen Share -->
+        <button id="screen-toggle" class="dock-btn icon-only" title="Toggle Screen Share" disabled>
+          <i class="fa-solid fa-desktop"></i>
+        </button>
+
+        <div class="divider"></div>
+
+        <!-- Open LED Control Screen Modal -->
+        <button id="open-led-modal-btn" class="dock-btn icon-only" title="Open ESP32 LED Control Screen">
+          <i class="fa-solid fa-lightbulb"></i>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ESP32 LED Control Startup Modal Screen -->
+  <div class="modal-overlay hidden" id="led-modal-overlay">
+    <div class="modal-container glass-card" id="led-modal-window">
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <i class="fa-solid fa-lightbulb modal-title-icon"></i>
+          <div>
+            <h2>ESP32 LED Control Screen</h2>
+            <span class="modal-subtitle">Session active — Press buttons to pulse onboard LED 1 to 10 times</span>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" id="close-led-modal" title="Close screen">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="modal-body">
+        <!-- Visual Virtual LED & Status -->
+        <div class="virtual-led-container">
+          <div class="virtual-led-display">
+            <div class="virtual-led-bulb" id="modal-virtual-led">
+              <i class="fa-solid fa-bolt led-icon"></i>
+            </div>
+            <div class="led-pulse-ring" id="modal-pulse-ring"></div>
+          </div>
+          <div class="led-info">
+            <span class="led-title">ESP32 Onboard LED (GPIO 2)</span>
+            <span class="led-sub" id="modal-led-pulse-status">Ready for pulse command</span>
+          </div>
+          <div class="led-status-badge disconnected" id="modal-led-status-badge" style="margin-left: auto;">
+            <span class="status-dot" id="modal-led-dot"></span>
+            <span id="modal-led-status-text">OFF</span>
+          </div>
+        </div>
+
+        <!-- 10 Pulse Buttons Grid (1 to 10) -->
+        <div class="pulse-section">
+          <label class="pulse-grid-label">
+            <i class="fa-solid fa-hand-pointer"></i> Select Pulse Count (1 - 10 Times)
+          </label>
+          <div class="pulse-buttons-grid modal-pulse-grid">
+            <button type="button" class="pulse-btn modal-pulse-btn" data-count="1" title="Pulse 1 time">
+              <span class="btn-num">1</span>
+              <span class="btn-lbl">Pulse</span>
+            </button>
+            <button type="button" class="pulse-btn modal-pulse-btn" data-count="2" title="Pulse 2 times">
+              <span class="btn-num">2</span>
+              <span class="btn-lbl">Pulses</span>
+            </button>
+            <button type="button" class="pulse-btn modal-pulse-btn" data-count="3" title="Pulse 3 times">
+              <span class="btn-num">3</span>
+              <span class="btn-lbl">Pulses</span>
+            </button>
+            <button type="button" class="pulse-btn modal-pulse-btn" data-count="4" title="Pulse 4 times">
+              <span class="btn-num">4</span>
+              <span class="btn-lbl">Pulses</span>
+            </button>
+            <button type="button" class="pulse-btn modal-pulse-btn" data-count="5" title="Pulse 5 times">
+              <span class="btn-num">5</span>
+              <span class="btn-lbl">Pulses</span>
+            </button>
+            <button type="button" class="pulse-btn modal-pulse-btn" data-count="6" title="Pulse 6 times">
+              <span class="btn-num">6</span>
+              <span class="btn-lbl">Pulses</span>
+            </button>
+            <button type="button" class="pulse-btn modal-pulse-btn" data-count="7" title="Pulse 7 times">
+              <span class="btn-num">7</span>
+              <span class="btn-lbl">Pulses</span>
+            </button>
+            <button type="button" class="pulse-btn modal-pulse-btn" data-count="8" title="Pulse 8 times">
+              <span class="btn-num">8</span>
+              <span class="btn-lbl">Pulses</span>
+            </button>
+            <button type="button" class="pulse-btn modal-pulse-btn" data-count="9" title="Pulse 9 times">
+              <span class="btn-num">9</span>
+              <span class="btn-lbl">Pulses</span>
+            </button>
+            <button type="button" class="pulse-btn modal-pulse-btn" data-count="10" title="Pulse 10 times">
+              <span class="btn-num">10</span>
+              <span class="btn-lbl">Pulses</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Direct Actions -->
+        <div class="led-quick-actions" style="margin-top: 0.5rem;">
+          <button type="button" id="modal-led-on-btn" class="text-btn btn-small action-on">
+            <i class="fa-solid fa-power-off"></i> Turn ON
+          </button>
+          <button type="button" id="modal-led-off-btn" class="text-btn btn-small action-off">
+            <i class="fa-solid fa-circle-xmark"></i> Turn OFF
+          </button>
+        </div>
+
+        <!-- PCA9685 Servo Motors Control Section (Default 90°) -->
+        <div class="servo-control-section" style="margin-top: 1.25rem;">
+          <div class="section-title-bar" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <i class="fa-solid fa-sliders" style="color: #38bdf8;"></i>
+            <h3 style="font-size: 0.95rem; font-weight: 600; color: #f8fafc; margin: 0;">PCA9685 Servo Motor Control (Default 90°)</h3>
+          </div>
+
+          <div class="servo-grid-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <!-- Left ESP32 PCA9685 Servos (8 Servos) -->
+            <div class="servo-board-group" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 0.75rem;">
+              <h4 style="font-size: 0.85rem; font-weight: 600; color: #38bdf8; margin: 0 0 0.5rem 0; display: flex; align-items: center; justify-content: space-between;">
+                <span>👈 Left ESP32 PCA9685</span>
+                <span style="font-size: 0.75rem; color: #94a3b8; font-weight: normal;">8 Servos</span>
+              </h4>
+
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Left Parrot Up/Dn</span><span class="servo-val-badge" id="lbl-left-0">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider" data-board="left" data-channel="0" data-name="Left Parrot Up/Dn">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Left Parrot Right/Left</span><span class="servo-val-badge" id="lbl-left-1">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider" data-board="left" data-channel="1" data-name="Left Parrot Right/Left">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Left Parrot Rotate</span><span class="servo-val-badge" id="lbl-left-2">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider" data-board="left" data-channel="2" data-name="Left Parrot Rotate">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Left Spotlight Up/Dn</span><span class="servo-val-badge" id="lbl-left-3">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider" data-board="left" data-channel="3" data-name="Left Spotlight Up/Dn">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Left Spotlight Rotate</span><span class="servo-val-badge" id="lbl-left-4">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider" data-board="left" data-channel="4" data-name="Left Spotlight Rotate">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Center Bird Up/Dn</span><span class="servo-val-badge" id="lbl-left-5">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider" data-board="left" data-channel="5" data-name="Center Bird Up/Dn">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Center Bird Right/Left</span><span class="servo-val-badge" id="lbl-left-6">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider" data-board="left" data-channel="6" data-name="Center Bird Right/Left">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Center Bird Rotate</span><span class="servo-val-badge" id="lbl-left-7">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider" data-board="left" data-channel="7" data-name="Center Bird Rotate">
+              </div>
+            </div>
+
+            <!-- Right ESP32 PCA9685 Servos (6 Servos) -->
+            <div class="servo-board-group" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 8px; padding: 0.75rem;">
+              <h4 style="font-size: 0.85rem; font-weight: 600; color: #a855f7; margin: 0 0 0.5rem 0; display: flex; align-items: center; justify-content: space-between;">
+                <span>👉 Right ESP32 PCA9685</span>
+                <span style="font-size: 0.75rem; color: #94a3b8; font-weight: normal;">6 Servos</span>
+              </h4>
+
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Right Parrot Up/Dn</span><span class="servo-val-badge purple-badge" id="lbl-right-0">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider purple-slider" data-board="right" data-channel="0" data-name="Right Parrot Up/Dn">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Right Parrot Right/Left</span><span class="servo-val-badge purple-badge" id="lbl-right-1">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider purple-slider" data-board="right" data-channel="1" data-name="Right Parrot Right/Left">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Right Parrot Rotate</span><span class="servo-val-badge purple-badge" id="lbl-right-2">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider purple-slider" data-board="right" data-channel="2" data-name="Right Parrot Rotate">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Right Spotlight Up/Dn</span><span class="servo-val-badge purple-badge" id="lbl-right-3">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider purple-slider" data-board="right" data-channel="3" data-name="Right Spotlight Up/Dn">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Right Spotlight Rotate</span><span class="servo-val-badge purple-badge" id="lbl-right-4">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider purple-slider" data-board="right" data-channel="4" data-name="Right Spotlight Rotate">
+              </div>
+              <div class="servo-item">
+                <div class="servo-label-row"><span class="servo-name">Center Turntable Rotate</span><span class="servo-val-badge purple-badge" id="lbl-right-5">90°</span></div>
+                <input type="range" min="0" max="180" value="90" class="servo-range-slider purple-slider" data-board="right" data-channel="5" data-name="Center Turntable Rotate">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-footer">
+        <button type="button" id="dismiss-led-modal" class="text-btn btn-small" style="padding: 0.5rem 1.25rem;">
+          Return to App
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main JavaScript App -->
+  <script src="app.js"></script>
+</body>
+</html>
