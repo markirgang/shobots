@@ -1,10 +1,10 @@
 /*
-  Shobots Controller - ESP32 6-DOF Robot Arm Firmware
+  Hexapod Controller - ESP32 6-DOF Robot Arm Firmware
   Features:
     - 3D Analytical Inverse Kinematics (IK) Engine for (X, Y, Z, Pitch) End-Effector Positioning
     - Coordinated Speed & Trajectory Interpolation Engine (50Hz Cosine S-Curve Interpolation)
     - PCA9685 16-Channel I2C Servo Driver Interface (Address 0x40)
-    - Full backward compatibility with Shobots Controller GUI & Web Serial commands
+    - Full backward compatibility with Hexapod Controller GUI & Web Serial commands
 
   Pinout:
     - I2C SDA : GPIO 21

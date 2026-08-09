@@ -1,7 +1,7 @@
 /*
-  Shobots Controller - ESP32 Controller Firmware (Dual Board & Robot Arm Compatible)
+  Hexapod Controller - ESP32 Controller Firmware (Dual Board & Robot Arm Compatible)
   
-  This sketch runs on any ESP32 board (Left, Right, or Arm) for the Shobots Controller project.
+  This sketch runs on any ESP32 board (Left, Right, or Arm) for the Hexapod Controller project.
   It configures output GPIO pins and controls PCA9685 16-channel I2C Servo Drivers.
 
     GPIO 0  : Parrot Mouth

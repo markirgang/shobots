@@ -1,7 +1,7 @@
 /*
-  Shobots Controller - ESP32 Shobots Firmware
+  Hexapod Controller - ESP32 Hexapod Firmware
   Features:
-    - Bluetooth Classic Serial Interface (Broadcast Name: "shobots")
+    - Bluetooth Classic Serial Interface (Broadcast Name: "hexapod")
     - Dual PCA9685 16-Channel I2C Servo Driver Control:
         * Driver 1 (I2C 0x40): Left Legs (FL, ML, RL)
         * Driver 2 (I2C 0x41): Right Legs (FR, MR, RR)
@@ -59,7 +59,7 @@ BluetoothSerial SerialBT;
 #define SERVOMIN     150  // Min pulse length out of 4096 (0 deg)
 #define SERVOMAX     600  // Max pulse length out of 4096 (180 deg)
 
-// Shobots Physical Link Dimensions (in mm)
+// Hexapod Physical Link Dimensions (in mm)
 const float COXA_LEN  = 30.0f; // Hip swivel length
 const float FEMUR_LEN = 60.0f; // Upper leg length
 const float TIBIA_LEN = 90.0f; // Lower leg length
@@ -336,7 +336,7 @@ void parseCommand(String cmd) {
   cmd.trim();
   if (cmd.length() == 0) return;
 
-  Serial.print("[Shobots CMD Received] ");
+  Serial.print("[Hexapod CMD Received] ");
   Serial.println(cmd);
 
   // 1. Direct Servo Command: "HEX:SERVO:<driver>:<chan>:<deg>"
@@ -352,7 +352,7 @@ void parseCommand(String cmd) {
       int servoIdx = (driver == 1 ? 0 : 9) + chan;
       if (servoIdx >= 0 && servoIdx < TOTAL_SERVOS) {
         setSingleTargetAngle(servoIdx, deg, moveDurationMs);
-        Serial.print("[Shobots] Driver ");
+        Serial.print("[Hexapod] Driver ");
         Serial.print(driver);
         Serial.print(" Chan ");
         Serial.print(chan);
@@ -412,7 +412,7 @@ void parseCommand(String cmd) {
     if (col != -1) {
       moveDurationMs = cmd.substring(col + 1).toInt();
       if (moveDurationMs < 20) moveDurationMs = 20;
-      Serial.print("[Shobots] Global Trajectory Speed set to ");
+      Serial.print("[Hexapod] Global Trajectory Speed set to ");
       Serial.print(moveDurationMs);
       Serial.println(" ms");
     }
@@ -452,13 +452,13 @@ void setup() {
   while (!Serial && millis() < 2000);
 
   Serial.println("==============================================");
-  Serial.println("🤖 ESP32 Shobots Firmware Initializing...");
+  Serial.println("🤖 ESP32 Hexapod Firmware Initializing...");
   Serial.println("Features: Bluetooth Classic + IK + 50Hz Interpolation");
   Serial.println("==============================================");
 
   // Initialize Bluetooth Classic Serial
-  if (SerialBT.begin("shobots")) {
-    Serial.println("[Bluetooth] ESP32 Broadcasting as 'shobots' READY!");
+  if (SerialBT.begin("hexapod")) {
+    Serial.println("[Bluetooth] ESP32 Broadcasting as 'hexapod' READY!");
   } else {
     Serial.println("[Bluetooth] Failed to start Bluetooth Serial!");
   }
@@ -476,7 +476,7 @@ void setup() {
     writeHardwareAngle(i, 90.0f);
   }
 
-  Serial.println("[Shobots] Drivers 0x40 & 0x41 Initialized to 90 Deg Stand Posture.");
+  Serial.println("[Hexapod] Drivers 0x40 & 0x41 Initialized to 90 Deg Stand Posture.");
   Serial.println("==============================================");
 }
 

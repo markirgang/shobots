@@ -1,17 +1,17 @@
-# Shobots Controller - Multimodal AI Robotics & Control Suite
+# Hexapod Controller - Multimodal AI Robotics & Control Suite
 
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/markirgang/Shobots)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/markirgang/Hexapod)
 
-**Shobots Controller** is a real-time multimodal AI robotics application powered by Google's Gemini Multimodal Live API. It provides voice and video interaction with local hardware components including ESP32 microcontrollers, PCA9685 I2C servo drivers, a 6-DOF Robot Arm, a 6-leg Shobots Robot over Bluetooth, a Tello drone over UDP, and smart home devices.
+**Hexapod Controller** is a real-time multimodal AI robotics application powered by Google's Gemini Multimodal Live API. It provides voice and video interaction with local hardware components including ESP32 microcontrollers, PCA9685 I2C servo drivers, a 6-DOF Robot Arm, a 6-leg Hexapod Robot over Bluetooth, a Tello drone over UDP, and smart home devices.
 
 ---
 
 ## Features & Supported Hardware
 
-- **Shobots Controller GUI**:
+- **Hexapod Controller GUI**:
   - **` 🔘 GPIO Pin Controls `**: Control up to 22 digital outputs across Dual ESP32 boards.
   - **` ⚙️ PCA9685 Servo Control `**: Direct pulse and angle sliders for 14 PCA9685 PWM servos.
-  - **` 🤖 Shobots Bot `**: 6-leg 3-DOF robot controller over Bluetooth (`broadcast: shobots`).
+  - **` 🤖 Hexapod Bot `**: 6-leg 3-DOF robot controller over Bluetooth (`broadcast: hexapod`).
   - **` 🚁 Tello Drone `**: Direct flight navigation and directional movement controller over UDP.
   - **` 🦾 6-DOF Robot Arm `**: 6-joint precision servo controller with gestures (**Yes/Nod**, **No/Shake**, **High Five**, **Wave**, **Bow**, **Dance**) and demonstration routines (**Pick & Place**).
 
@@ -43,7 +43,7 @@
    GEMINI_API_KEY=your_gemini_api_key_here
    ```
 
-5. **Launch Shobots Controller**:
+5. **Launch Hexapod Controller**:
    ```bash
    python main.py
    ```
@@ -65,17 +65,17 @@ git_tree.bat
 *(Equivalent command: `git log --graph --oneline --all --decorate`)*
 
 ### Connecting to GitHub
-To push your local **Shobots** repository to GitHub:
+To push your local **Hexapod** repository to GitHub:
 ```bash
 # 1. Initialize Git (if not already initialized)
 git init
 
 # 2. Add files & make a commit
 git add .
-git commit -m "Initial commit of Shobots Controller"
+git commit -m "Initial commit of Hexapod Controller"
 
 # 3. Link remote repository
-git remote add origin https://github.com/<your-username>/Shobots.git
+git remote add origin https://github.com/<your-username>/Hexapod.git
 
 # 4. Push to GitHub
 git branch -M main
@@ -88,16 +88,16 @@ For detailed GitHub step-by-step instructions, see [`GITHUB_SETUP.md`](GITHUB_SE
 ## Project Structure
 
 ```
-Shobots/
+Hexapod/
 ├── esp32_arm/
 │   └── esp32_arm.ino           # ESP32 6-DOF Robot Arm firmware (3D IK & Trajectory Interpolation)
-├── esp32_shobots/
-│   └── esp32_shobots.ino       # ESP32 6-Leg Shobots robot firmware (IK & Trajectory Interpolation)
+├── esp32_hexapod/
+│   └── esp32_hexapod.ino       # ESP32 6-Leg Hexapod robot firmware (IK & Trajectory Interpolation)
 ├── esp32_led/
 │   └── esp32_led.ino           # ESP32 dual-board & Robot Arm firmware
 ├── app.js                      # Web application frontend & Web Serial controller
-├── index.html                  # Shobots Multimodal Web Dashboard
-├── main.py                     # Shobots Controller GUI & Gemini Session Manager
+├── index.html                  # Hexapod Multimodal Web Dashboard
+├── main.py                     # Hexapod Controller GUI & Gemini Session Manager
 ├── style.css                   # Glassmorphic UI styling system
 ├── git_tree.bat                # Executable Git Commit Tree graph launcher
 ├── GITHUB_SETUP.md             # Step-by-step GitHub integration guide
