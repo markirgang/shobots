@@ -2,7 +2,7 @@
 
 [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/markirgang/Shobots)
 
-**Shobots Controller** is a real-time multimodal AI robotics application powered by Google's Gemini Multimodal Live API. It provides voice and video interaction with local hardware components including ESP32 microcontrollers, PCA9685 I2C servo drivers, a 6-DOF Robot Arm, a 6-leg Hexapod over Bluetooth, a Tello drone over UDP, and smart home devices.
+**Shobots Controller** is a real-time multimodal AI robotics application powered by Google's Gemini Multimodal Live API. It provides voice and video interaction with local hardware components including ESP32 microcontrollers, PCA9685 I2C servo drivers, a 6-DOF Robot Arm, a 6-leg Shobots Robot over Bluetooth, a Tello drone over UDP, and smart home devices.
 
 ---
 
@@ -11,7 +11,7 @@
 - **Shobots Controller GUI**:
   - **` 🔘 GPIO Pin Controls `**: Control up to 22 digital outputs across Dual ESP32 boards.
   - **` ⚙️ PCA9685 Servo Control `**: Direct pulse and angle sliders for 14 PCA9685 PWM servos.
-  - **` 🕷️ Hexapod `**: 6-leg 3-DOF robot controller over Bluetooth (`broadcast: hexapod`).
+  - **` 🤖 Shobots Bot `**: 6-leg 3-DOF robot controller over Bluetooth (`broadcast: shobots`).
   - **` 🚁 Tello Drone `**: Direct flight navigation and directional movement controller over UDP.
   - **` 🦾 6-DOF Robot Arm `**: 6-joint precision servo controller with gestures (**Yes/Nod**, **No/Shake**, **High Five**, **Wave**, **Bow**, **Dance**) and demonstration routines (**Pick & Place**).
 
@@ -47,7 +47,7 @@
    ```bash
    python main.py
    ```
-   Or double-click [`run.bat`](file:///c:/Users/marki/OneDrive/Desktop/Hexapod/run.bat).
+   Or double-click `run.bat`.
 
 ---
 
@@ -81,7 +81,7 @@ git remote add origin https://github.com/<your-username>/Shobots.git
 git branch -M main
 git push -u origin main
 ```
-For detailed GitHub step-by-step instructions, see [`GITHUB_SETUP.md`](file:///c:/Users/marki/OneDrive/Desktop/Hexapod/GITHUB_SETUP.md).
+For detailed GitHub step-by-step instructions, see [`GITHUB_SETUP.md`](GITHUB_SETUP.md).
 
 ---
 
@@ -91,8 +91,8 @@ For detailed GitHub step-by-step instructions, see [`GITHUB_SETUP.md`](file:///c
 Shobots/
 ├── esp32_arm/
 │   └── esp32_arm.ino           # ESP32 6-DOF Robot Arm firmware (3D IK & Trajectory Interpolation)
-├── esp32_hexapod/
-│   └── esp32_hexapod.ino       # ESP32 6-Leg Hexapod firmware (IK & Trajectory Interpolation)
+├── esp32_shobots/
+│   └── esp32_shobots.ino       # ESP32 6-Leg Shobots robot firmware (IK & Trajectory Interpolation)
 ├── esp32_led/
 │   └── esp32_led.ino           # ESP32 dual-board & Robot Arm firmware
 ├── app.js                      # Web application frontend & Web Serial controller

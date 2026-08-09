@@ -6,7 +6,7 @@ This guide explains how to initialize Git, configure `git tree`, create a GitHub
 
 ## 1. Local Git Initialization
 
-If Git is not already initialized in your project folder, open PowerShell or Command Prompt in `c:\Users\marki\OneDrive\Desktop\Hexapod` and run:
+If Git is not already initialized in your project folder, open PowerShell or Command Prompt in your `Shobots` project directory and run:
 
 ```bash
 git init
@@ -71,4 +71,4 @@ git push -u origin main
 
 ## 5. Quick Git Tree Batch Launcher
 
-You can also double-click [`git_tree.bat`](file:///c:/Users/marki/OneDrive/Desktop/Hexapod/git_tree.bat) or run `git_tree.bat` from Command Prompt at any time to view your Git commit tree history.
+You can also double-click `git_tree.bat` or run `git_tree.bat` from Command Prompt at any time to view your Git commit tree history.

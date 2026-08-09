@@ -376,9 +376,9 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
 
         function_declarations.append(
             types.FunctionDeclaration(
-                name="control_hexapod",
+                name="control_shobots",
                 description=(
-                    "Controls the 6-leg ESP32 hexapod robot over Bluetooth (broadcast name: 'hexapod'). "
+                    "Controls the 6-leg ESP32 shobots robot over Bluetooth (broadcast name: 'shobots'). "
                     "Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow'. "
                     "Can also adjust individual leg joints (leg_name: 'FL', 'ML', 'RL', 'FR', 'MR', 'RR', joint_name: 'coxa', 'femur', 'tibia') "
                     "or set 3D Inverse Kinematics (IK) foot position (x, y, z in mm)."
@@ -576,7 +576,7 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
     system_instruction = (
         "You are a helpful real-time multimodal voice assistant running on the user's local computer. "
         "You have direct access to local hardware and smart devices: an onboard LED of an ESP32 microcontroller, "
-        "a 6-leg ESP32 hexapod robot over Bluetooth (broadcast: hexapod), a 6-DOF ESP32 Robot Arm via PCA9685, a Tello drone, Leviton smart lights, and eWeLink (Sonoff) devices.\n\n"
+        "a 6-leg ESP32 shobots robot over Bluetooth (broadcast: shobots), a 6-DOF ESP32 Robot Arm via PCA9685, a Tello drone, Leviton smart lights, and eWeLink (Sonoff) devices.\n\n"
         "1. VISUAL MODALITY AWARENESS:\n"
         "   - You are receiving a continuous, real-time video stream (from the user's webcam or screen share).\n"
         "   - Pay close attention to what you see. You MUST proactively notice, react to, and comment on objects, gestures, text, or visual changes shown in the video feed. Do NOT wait for the user to prompt you or say they are showing you something; describe what you see naturally as part of the conversation.\n"
@@ -586,7 +586,7 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         "   - When estimating time or counting seconds (e.g., if the user asks you to wait 5 seconds, count seconds, or track time), use the number of incoming frames as your clock (e.g. 5 frames = 5 seconds). Do not rush or estimate time based on text-generation speeds; wait for the appropriate amount of time to pass.\n\n"
         "3. HARDWARE CONTROL:\n"
         "   - Robot Arm: You MUST use the `control_robot_arm` tool when the user asks verbally or visually to control the 6-DOF robot arm, perform gestures like 'yes', 'no', 'high_five', 'wave', 'bow', 'dance', execute pick & place, or set arm joint angles.\n"
-        "   - Hexapod Robot: You MUST use the `control_hexapod` tool when the user asks verbally or visually to control the 6-leg hexapod (e.g. walk, run, wave left arm, wave right arm, dance, sit, stand, flat to floor, turn left, turn right, bow, or set leg joints).\n"
+        "   - Shobots Robot: You MUST use the `control_shobots` tool when the user asks verbally or visually to control the 6-leg shobots robot (e.g. walk, run, wave left arm, wave right arm, dance, sit, stand, flat to floor, turn left, turn right, bow, or set leg joints).\n"
         "   - ESP32 PCA9685 Servos: You MUST use the `set_servo_angle` tool when the user asks verbally or visually to move, position, turn, or adjust any of the servos on the Left, Right, or Arm ESP32 (e.g. Left/Right Parrot Up/Dn, Right Spotlight Rotate, Center Bird Up/Dn, Center Turntable Rotate, Base/Shoulder/Elbow, etc.) to a specific degree angle (0 to 180 degrees).\n"
         "   - ESP32 LED: You MUST use the `set_led_state` tool to turn the LED on or off. If the user asks you to pulse, blink, or flash the LED a certain number of times (e.g., to match the count of fingers you see in the frame), you MUST use the `pulse_led` tool with the appropriate count.\n"
         "   - Tello Drone: You MUST use the `send_tello_command` tool to control the Tello drone when the user asks you to perform actions like takeoff, landing, moving, flipping, or rotating.\n"
@@ -825,15 +825,15 @@ def scan_and_autodetect_esp32_ports():
 
 def scan_bluetooth_ports():
     """
-    Scans system serial / Bluetooth ports for connected ESP32 Bluetooth devices (broadcast: hexapod).
+    Scans system serial / Bluetooth ports for connected ESP32 Bluetooth devices (broadcast: shobots).
     Returns:
       display_options: list of human-readable labels for Comboboxes
       device_map: dict mapping label -> raw device name or BT broadcast identifier
       detected_bt_label: label for auto-detected Bluetooth device
     """
-    display_options = ["hexapod (Bluetooth Broadcast)", "None (Simulation Mode)"]
+    display_options = ["shobots (Bluetooth Broadcast)", "None (Simulation Mode)"]
     device_map = {
-        "hexapod (Bluetooth Broadcast)": "hexapod",
+        "shobots (Bluetooth Broadcast)": "shobots",
         "None (Simulation Mode)": "None"
     }
 
@@ -853,27 +853,27 @@ def scan_bluetooth_ports():
     return display_options, device_map, detected_bt_label
 
 
-def choose_hexapod_bt_port():
+def choose_shobots_bt_port():
     options, dev_map, auto_lbl = scan_bluetooth_ports()
-    print("\nScanning for Bluetooth ESP32 Hexapod connections...")
+    print("\nScanning for Bluetooth ESP32 Shobots connections...")
     for idx, opt in enumerate(options):
         print(f"  [{idx + 1}] {opt}")
-    choice = input(f"Select Hexapod Bluetooth connection [1-{len(options)}, default: 1 ({auto_lbl})]: ").strip()
+    choice = input(f"Select Shobots Bluetooth connection [1-{len(options)}, default: 1 ({auto_lbl})]: ").strip()
     if not choice:
-        return dev_map.get(auto_lbl, "hexapod")
+        return dev_map.get(auto_lbl, "shobots")
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(options):
             return dev_map.get(options[idx], options[idx])
     except ValueError:
         return choice
-    return dev_map.get(auto_lbl, "hexapod")
+    return dev_map.get(auto_lbl, "shobots")
 
 
-class HexapodController:
+class ShobotsController:
     """
-    Controller for a 6-Leg Hexapod having an ESP32 connected to 2 PCA9685 Servo Drivers over Bluetooth.
-    Bluetooth Broadcast Name: 'hexapod'
+    Controller for a 6-Leg Shobots Robot having an ESP32 connected to 2 PCA9685 Servo Drivers over Bluetooth.
+    Bluetooth Broadcast Name: 'shobots'
 
     6 Legs with 3 Degrees of Freedom (DoF) each = 18 Servos total:
       Legs:
@@ -894,7 +894,7 @@ class HexapodController:
         "RR": {"name": "Rear Right",   "driver": 2, "channels": {"coxa": 6, "femur": 7, "tibia": 8}},
     }
 
-    def __init__(self, bt_port="hexapod"):
+    def __init__(self, bt_port="shobots"):
         self.bt_port = bt_port
         self.serial_conn = None
         self.simulated = True
@@ -926,7 +926,7 @@ class HexapodController:
                 except Exception:
                     pass
             self.serial_conn = None
-            return True, "Hexapod Bluetooth set to Simulation Mode"
+            return True, "Shobots Bluetooth set to Simulation Mode"
 
         try:
             target = self.bt_port
@@ -935,7 +935,7 @@ class HexapodController:
                 if target in d_map:
                     target = d_map[target]
                 else:
-                    target = "hexapod"
+                    target = "shobots"
 
             if target.upper().startswith("COM") or target.startswith("/dev/"):
                 conn = serial.Serial()
@@ -946,26 +946,26 @@ class HexapodController:
                 self.serial_conn = conn
                 self.simulated = False
                 self.connected_device = f"Bluetooth ({target})"
-                return True, f"Connected to Hexapod ESP32 via Bluetooth on {target}"
+                return True, f"Connected to Shobots ESP32 via Bluetooth on {target}"
             else:
                 self.simulated = True
-                self.connected_device = f"Bluetooth Broadcast 'hexapod' (Simulated)"
-                return True, f"Hexapod Bluetooth ('hexapod') connected (Simulated mode)"
+                self.connected_device = f"Bluetooth Broadcast 'shobots' (Simulated)"
+                return True, f"Shobots Bluetooth ('shobots') connected (Simulated mode)"
         except Exception as e:
             self.simulated = True
             self.connected_device = f"Simulation Mode (Error: {e})"
-            return True, f"Hexapod Bluetooth fallback to Simulation Mode ({e})"
+            return True, f"Shobots Bluetooth fallback to Simulation Mode ({e})"
 
     def send_bt_command(self, cmd_str: str):
         if self.serial_conn and self.serial_conn.is_open:
             try:
                 self.serial_conn.write(cmd_str.encode("utf-8"))
                 self.serial_conn.flush()
-                print(f"[Hexapod BT Sent] {cmd_str.strip()}")
+                print(f"[Shobots BT Sent] {cmd_str.strip()}")
             except Exception as e:
-                print(f"[Hexapod BT Error] {e}")
+                print(f"[Shobots BT Error] {e}")
         else:
-            print(f"[Simulated Hexapod BT] {cmd_str.strip()}")
+            print(f"[Simulated Shobots BT] {cmd_str.strip()}")
 
     def set_joint_angle(self, leg_code: str, joint: str, angle: int):
         leg_code = leg_code.upper()
@@ -980,7 +980,7 @@ class HexapodController:
             self.send_bt_command(cmd)
 
             if self.gui_window:
-                self.gui_window.update_hexapod_joint_slider(leg_code, joint, angle)
+                self.gui_window.update_shobots_joint_slider(leg_code, joint, angle)
             return {"status": "success", "leg": leg_code, "joint": joint, "angle": angle}
         return {"status": "error", "message": f"Invalid leg '{leg_code}' or joint '{joint}'"}
 
@@ -1006,13 +1006,13 @@ class HexapodController:
             self.current_motion = action
             if action == "stand":
                 self._apply_posture({"coxa": 90, "femur": 90, "tibia": 90})
-                msg = "Hexapod Standing Upright (3 DoF per leg)"
+                msg = "Shobots Standing Upright (3 DoF per leg)"
             elif action == "sit":
                 self._apply_posture({"coxa": 90, "femur": 30, "tibia": 150})
-                msg = "Hexapod Sitting Down"
+                msg = "Shobots Sitting Down"
             else: # flat
                 self._apply_posture({"coxa": 90, "femur": 0, "tibia": 0})
-                msg = "Hexapod Flat to Floor"
+                msg = "Shobots Flat to Floor"
 
             self.send_bt_command(f"HEX:{action}\r\n")
             return {"status": "success", "action": action, "message": msg}
@@ -1042,15 +1042,15 @@ class HexapodController:
             self.motion_thread = threading.Thread(target=target_func, daemon=True)
             self.motion_thread.start()
             self.send_bt_command(f"HEX:{action}\r\n")
-            return {"status": "success", "action": action, "message": f"Executing motion '{action_name}' on Hexapod"}
+            return {"status": "success", "action": action, "message": f"Executing motion '{action_name}' on Shobots"}
 
         elif action == "stop":
             self.current_motion = "idle"
             self.send_bt_command("HEX:stop\r\n")
-            return {"status": "success", "action": "stop", "message": "Hexapod motion stopped"}
+            return {"status": "success", "action": "stop", "message": "Shobots motion stopped"}
 
         else:
-            return {"status": "error", "message": f"Unknown hexapod action '{action_name}'"}
+            return {"status": "error", "message": f"Unknown shobots action '{action_name}'"}
 
     def _apply_posture(self, joint_angles: dict):
         for leg_code in self.LEGS:
@@ -1792,45 +1792,45 @@ class ESP32PulseWindow:
             self.servo_sliders[("right", chan)] = scale
             self.servo_labels[("right", chan)] = val_lbl
 
-        # --- TAB 3: HEXAPOD CONTROL ---
-        tab_hexapod = ttk.Frame(notebook, padding=10)
-        notebook.add(tab_hexapod, text=" 🕷️ Hexapod ")
+        # --- TAB 3: SHOBOTS BOT CONTROL ---
+        tab_shobots = ttk.Frame(notebook, padding=10)
+        notebook.add(tab_shobots, text=" 🤖 Shobots Bot ")
 
         # Bluetooth Header Frame inside Tab 3
-        hex_bt_frame = ttk.LabelFrame(tab_hexapod, text=" 📶 Hexapod ESP32 Bluetooth Connection (Broadcast Name: hexapod) ", padding=10)
-        hex_bt_frame.pack(fill="x", padx=5, pady=(0, 8))
+        shobots_bt_frame = ttk.LabelFrame(tab_shobots, text=" 📶 Shobots ESP32 Bluetooth Connection (Broadcast Name: shobots) ", padding=10)
+        shobots_bt_frame.pack(fill="x", padx=5, pady=(0, 8))
 
-        ttk.Label(hex_bt_frame, text="ESP32 Bluetooth Connection:").grid(row=0, column=0, sticky="w", padx=(0, 5))
-        self.hexapod_bt_combo = ttk.Combobox(hex_bt_frame, state="normal", width=35)
-        self.hexapod_bt_combo.grid(row=0, column=1, sticky="w", padx=(0, 10))
+        ttk.Label(shobots_bt_frame, text="ESP32 Bluetooth Connection:").grid(row=0, column=0, sticky="w", padx=(0, 5))
+        self.shobots_bt_combo = ttk.Combobox(shobots_bt_frame, state="normal", width=35)
+        self.shobots_bt_combo.grid(row=0, column=1, sticky="w", padx=(0, 10))
 
         def refresh_bt_ports(auto_conn=False):
             bt_opts, bt_map, auto_bt = scan_bluetooth_ports()
-            self.hexapod_bt_device_map = bt_map
-            self.hexapod_bt_combo['values'] = bt_opts
+            self.shobots_bt_device_map = bt_map
+            self.shobots_bt_combo['values'] = bt_opts
 
-            curr_dev = getattr(self.audio_loop, 'hexapod_bt_port', 'hexapod')
+            curr_dev = getattr(self.audio_loop, 'shobots_bt_port', 'shobots')
             match = [lbl for lbl, dev in bt_map.items() if dev == curr_dev] if curr_dev else []
             if match:
-                self.hexapod_bt_combo.set(match[0])
+                self.shobots_bt_combo.set(match[0])
             elif auto_bt in bt_opts:
-                self.hexapod_bt_combo.set(auto_bt)
+                self.shobots_bt_combo.set(auto_bt)
             else:
-                self.hexapod_bt_combo.set("hexapod (Bluetooth Broadcast)")
+                self.shobots_bt_combo.set("shobots (Bluetooth Broadcast)")
 
             if auto_conn:
-                on_connect_hexapod_bt()
+                on_connect_shobots_bt()
 
-        def on_connect_hexapod_bt():
-            sel_lbl = self.hexapod_bt_combo.get()
-            dev = self.hexapod_bt_device_map.get(sel_lbl, sel_lbl)
-            if hasattr(self.audio_loop, 'hexapod') and self.audio_loop.hexapod:
-                _, msg = self.audio_loop.hexapod.connect(dev)
-                self.audio_loop.hexapod_bt_port = dev
-                self.update_status(f"[Hexapod BT] {msg}")
+        def on_connect_shobots_bt():
+            sel_lbl = self.shobots_bt_combo.get()
+            dev = self.shobots_bt_device_map.get(sel_lbl, sel_lbl)
+            if hasattr(self.audio_loop, 'shobots') and self.audio_loop.shobots:
+                _, msg = self.audio_loop.shobots.connect(dev)
+                self.audio_loop.shobots_bt_port = dev
+                self.update_status(f"[Shobots BT] {msg}")
 
         bt_conn_btn = tk.Button(
-            hex_bt_frame,
+            shobots_bt_frame,
             text="Connect Bluetooth",
             font=("Segoe UI", 9, "bold"),
             bg="#10b981",
@@ -1840,12 +1840,12 @@ class ESP32PulseWindow:
             relief="flat",
             cursor="hand2",
             padx=8,
-            command=on_connect_hexapod_bt
+            command=on_connect_shobots_bt
         )
         bt_conn_btn.grid(row=0, column=2, padx=4)
 
         bt_scan_btn = tk.Button(
-            hex_bt_frame,
+            shobots_bt_frame,
             text="🔄 Rescan BT",
             font=("Segoe UI", 9, "bold"),
             bg="#334155",
@@ -1862,9 +1862,9 @@ class ESP32PulseWindow:
         refresh_bt_ports(auto_conn=False)
 
         # Preset Motion Buttons Frame
-        hex_actions_frame = ttk.LabelFrame(tab_hexapod, text=" 🤖 Hexapod Motion Functions & Preset Movements ", padding=10)
-        hex_actions_frame.pack(fill="x", padx=5, pady=(0, 8))
-        hex_actions_frame.columnconfigure((0, 1, 2, 3), weight=1)
+        shobots_actions_frame = ttk.LabelFrame(tab_shobots, text=" 🤖 Shobots Motion Functions & Preset Movements ", padding=10)
+        shobots_actions_frame.pack(fill="x", padx=5, pady=(0, 8))
+        shobots_actions_frame.columnconfigure((0, 1, 2, 3), weight=1)
 
         action_buttons = [
             ("🚶 Walk", "walk", "#0284c7", "#0369a1"),
@@ -1885,7 +1885,7 @@ class ESP32PulseWindow:
             r = idx // 4
             c = idx % 4
             btn = tk.Button(
-                hex_actions_frame,
+                shobots_actions_frame,
                 text=btn_label,
                 font=("Segoe UI", 9, "bold"),
                 bg=bg_col,
@@ -1895,12 +1895,12 @@ class ESP32PulseWindow:
                 relief="flat",
                 cursor="hand2",
                 height=2,
-                command=lambda a=action_key: self.on_hexapod_action(a)
+                command=lambda a=action_key: self.on_shobots_action(a)
             )
             btn.grid(row=r, column=c, padx=3, pady=3, sticky="nsew")
 
         # 6-Leg Servo Sliders Panel (2 PCA9685 Drivers, 18 Servos - 3 DoF per leg)
-        servo_main_box = ttk.LabelFrame(tab_hexapod, text=" 🦾 6-Leg Servo Drivers (2 PCA9685 Drivers, 18 Servos - 3 Degrees of Freedom) ", padding=10)
+        servo_main_box = ttk.LabelFrame(tab_shobots, text=" 🦾 6-Leg Servo Drivers (2 PCA9685 Drivers, 18 Servos - 3 Degrees of Freedom) ", padding=10)
         servo_main_box.pack(fill="both", expand=True, padx=5, pady=2)
 
         canvas = tk.Canvas(servo_main_box, bg="#0f172a", highlightthickness=0)
@@ -1927,8 +1927,8 @@ class ESP32PulseWindow:
         right_legs_box = ttk.LabelFrame(scrollable_frame, text=" 👉 Driver 2 (Right Legs: FR, MR, RR) ", padding=8)
         right_legs_box.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
-        self.hexapod_sliders = {}
-        self.hexapod_labels = {}
+        self.shobots_sliders = {}
+        self.shobots_labels = {}
 
         leg_groups = [
             ("left", left_legs_box, ["FL", "ML", "RL"], "#38bdf8", "#0284c7"),
@@ -1937,7 +1937,7 @@ class ESP32PulseWindow:
 
         for side, parent_box, legs_list, fg_col, act_col in leg_groups:
             for leg_code in legs_list:
-                leg_info = HexapodController.LEGS[leg_code]
+                leg_info = ShobotsController.LEGS[leg_code]
                 leg_name = leg_info["name"]
                 driver_num = leg_info["driver"]
 
@@ -1970,13 +1970,13 @@ class ESP32PulseWindow:
                         highlightthickness=0,
                         bd=0,
                         length=140,
-                        command=lambda val, lc=leg_code, j=joint, vl=val_lbl: self.on_hexapod_joint_moved(lc, j, val, vl)
+                        command=lambda val, lc=leg_code, j=joint, vl=val_lbl: self.on_shobots_joint_moved(lc, j, val, vl)
                     )
                     scale.set(90)
                     scale.pack(side="left", fill="x", expand=True)
 
-                    self.hexapod_sliders[(leg_code, joint)] = scale
-                    self.hexapod_labels[(leg_code, joint)] = val_lbl
+                    self.shobots_sliders[(leg_code, joint)] = scale
+                    self.shobots_labels[(leg_code, joint)] = val_lbl
 
         # --- TAB 4: TELLO DRONE CONTROL ---
         tab_drone = ttk.Frame(notebook, padding=10)
@@ -2345,12 +2345,12 @@ class ESP32PulseWindow:
             except Exception:
                 pass
 
-    def update_hexapod_joint_slider(self, leg_code, joint, angle):
+    def update_shobots_joint_slider(self, leg_code, joint, angle):
         if self.root:
             def _update():
                 key = (leg_code.upper(), joint.lower())
-                slider = self.hexapod_sliders.get(key)
-                lbl = self.hexapod_labels.get(key)
+                slider = self.shobots_sliders.get(key)
+                lbl = self.shobots_labels.get(key)
                 if slider:
                     slider.set(int(angle))
                 if lbl:
@@ -2397,23 +2397,23 @@ class ESP32PulseWindow:
         except Exception:
             pass
 
-    def on_hexapod_action(self, action_name):
+    def on_shobots_action(self, action_name):
         import threading
-        self.update_status(f"Executing Hexapod Action: '{action_name}'...")
+        self.update_status(f"Executing Shobots Action: '{action_name}'...")
         def _execute():
-            if hasattr(self.audio_loop, 'hexapod') and self.audio_loop.hexapod:
-                res = self.audio_loop.hexapod.execute_action(action_name)
-                msg = res.get("message", f"Hexapod action: {action_name}")
+            if hasattr(self.audio_loop, 'shobots') and self.audio_loop.shobots:
+                res = self.audio_loop.shobots.execute_action(action_name)
+                msg = res.get("message", f"Shobots action: {action_name}")
                 self.update_status(msg)
         threading.Thread(target=_execute, daemon=True).start()
 
-    def on_hexapod_joint_moved(self, leg_code, joint, value, label_widget):
+    def on_shobots_joint_moved(self, leg_code, joint, value, label_widget):
         try:
             deg = int(float(value))
             label_widget.config(text=f"{deg}°")
             def _execute():
-                if hasattr(self.audio_loop, 'hexapod') and self.audio_loop.hexapod:
-                    res = self.audio_loop.hexapod.set_joint_angle(leg_code, joint, deg)
+                if hasattr(self.audio_loop, 'shobots') and self.audio_loop.shobots:
+                    res = self.audio_loop.shobots.set_joint_angle(leg_code, joint, deg)
                     msg = res.get("message", f"Set Leg {leg_code} {joint} to {deg}°")
                     self.update_status(msg)
             import threading
@@ -2512,7 +2512,7 @@ class ESP32PulseWindow:
 
 
 class AudioLoop:
-    def __init__(self, video_mode=DEFAULT_MODE, camera_idx=0, mic_idx=None, speaker_idx=None, voice_name="Zephyr", esp32_port=None, esp32_left_port=None, esp32_right_port=None, esp32_arm_port=None, hexapod_bt_port="hexapod", tello_ip="192.168.10.1", tello_port=8889):
+    def __init__(self, video_mode=DEFAULT_MODE, camera_idx=0, mic_idx=None, speaker_idx=None, voice_name="Zephyr", esp32_port=None, esp32_left_port=None, esp32_right_port=None, esp32_arm_port=None, shobots_bt_port="shobots", hexapod_bt_port=None, tello_ip="192.168.10.1", tello_port=8889):
         self.video_mode = video_mode
         self.camera_idx = camera_idx
         self.mic_idx = mic_idx
@@ -2522,8 +2522,9 @@ class AudioLoop:
         self.esp32_right_port = esp32_right_port
         self.esp32_arm_port = esp32_arm_port
         self.esp32_port = self.esp32_left_port
-        self.hexapod_bt_port = hexapod_bt_port or "hexapod"
-        self.hexapod = HexapodController(bt_port=self.hexapod_bt_port)
+        self.shobots_bt_port = shobots_bt_port or hexapod_bt_port or "shobots"
+        self.shobots = ShobotsController(bt_port=self.shobots_bt_port)
+        self.hexapod = self.shobots  # Alias for backward compatibility
         self.robot_arm = RobotArmController(self)
         self.serial_left = None
         self.serial_right = None
@@ -2969,7 +2970,7 @@ class AudioLoop:
                                         id=fc.id
                                     )
                                 )
-                            elif fc.name == "control_hexapod":
+                            elif fc.name in ("control_shobots", "control_hexapod"):
                                 action = fc.args.get("action")
                                 leg_name = fc.args.get("leg_name")
                                 joint_name = fc.args.get("joint_name")
@@ -2980,11 +2981,11 @@ class AudioLoop:
                                 duration = fc.args.get("duration", 200)
 
                                 if action == "set_ik" or (leg_name and x is not None and y is not None and z is not None):
-                                    result = await asyncio.to_thread(self.hexapod.move_leg_ik, leg_name, x, y, z, duration)
+                                    result = await asyncio.to_thread(self.shobots.move_leg_ik, leg_name, x, y, z, duration)
                                 elif action == "set_joint" or (leg_name and joint_name and angle is not None):
-                                    result = await asyncio.to_thread(self.hexapod.set_joint_angle, leg_name, joint_name, angle)
+                                    result = await asyncio.to_thread(self.shobots.set_joint_angle, leg_name, joint_name, angle)
                                 elif action:
-                                    result = await asyncio.to_thread(self.hexapod.execute_action, action)
+                                    result = await asyncio.to_thread(self.shobots.execute_action, action)
                                 else:
                                     result = {"status": "error", "message": "Specify action, set_joint (leg+joint+angle), or set_ik (leg+x+y+z)"}
 
@@ -3076,8 +3077,8 @@ class AudioLoop:
         if self.esp32_right_port:
             self.connect_esp32("right", self.esp32_right_port)
 
-        if hasattr(self, 'hexapod') and self.hexapod:
-            self.hexapod.connect(self.hexapod_bt_port)
+        if hasattr(self, 'shobots') and self.shobots:
+            self.shobots.connect(self.shobots_bt_port)
 
         if not self.esp32_left_port and not self.esp32_right_port:
             print("No ESP32 ports specified. Running in simulation mode.")
@@ -3568,34 +3569,34 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
     arm_port_combo.grid(row=8, column=1, sticky=tk.W, pady=6)
     arm_port_combo.set(auto_arm_lbl)
 
-    # 5b. ESP32 Bluetooth Hexapod Connection Selector
+    # 5b. ESP32 Bluetooth Shobots Connection Selector
     bt_options, bt_dev_map, auto_bt_lbl = scan_bluetooth_ports()
-    ttk.Label(main_frame, text="Hexapod Bluetooth ESP32:").grid(row=9, column=0, sticky=tk.W, pady=6)
+    ttk.Label(main_frame, text="Shobots Bluetooth ESP32:").grid(row=9, column=0, sticky=tk.W, pady=6)
     
-    hex_bt_frame = ttk.Frame(main_frame)
-    hex_bt_frame.grid(row=9, column=1, sticky=tk.W, pady=6)
+    shobots_bt_frame = ttk.Frame(main_frame)
+    shobots_bt_frame.grid(row=9, column=1, sticky=tk.W, pady=6)
     
-    hexapod_bt_combo = ttk.Combobox(hex_bt_frame, values=bt_options, state="normal", width=25)
-    hexapod_bt_combo.pack(side=tk.LEFT, padx=(0, 5))
-    hexapod_bt_combo.set(auto_bt_lbl)
+    shobots_bt_combo = ttk.Combobox(shobots_bt_frame, values=bt_options, state="normal", width=25)
+    shobots_bt_combo.pack(side=tk.LEFT, padx=(0, 5))
+    shobots_bt_combo.set(auto_bt_lbl)
 
-    def on_scan_bt_hexapod():
+    def on_scan_bt_shobots():
         scan_bt_btn.configure(state="disabled", text="Scanning...")
         def run_bt_scan():
             opts, d_map, auto_lbl = scan_bluetooth_ports()
             def update_ui():
-                scan_bt_btn.configure(state="normal", text="Scan BT Hexapod")
-                hexapod_bt_combo['values'] = opts
+                scan_bt_btn.configure(state="normal", text="Scan BT Shobots")
+                shobots_bt_combo['values'] = opts
                 nonlocal bt_dev_map
                 bt_dev_map = d_map
                 if auto_lbl in opts:
-                    hexapod_bt_combo.set(auto_lbl)
+                    shobots_bt_combo.set(auto_lbl)
                 print(f"[Bluetooth Scan] Found {len(opts)} Bluetooth/Serial device(s).")
             root.after(0, update_ui)
         import threading
         threading.Thread(target=run_bt_scan, daemon=True).start()
 
-    scan_bt_btn = ttk.Button(hex_bt_frame, text="Scan BT Hexapod", command=on_scan_bt_hexapod)
+    scan_bt_btn = ttk.Button(shobots_bt_frame, text="Scan BT Shobots", command=on_scan_bt_shobots)
     scan_bt_btn.pack(side=tk.LEFT)
 
     # Tello Drone IP Entry
@@ -3829,8 +3830,8 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
 
         result["esp32_port"] = result["esp32_left_port"]
 
-        sel_bt_lbl = hexapod_bt_combo.get()
-        result["hexapod_bt_port"] = bt_dev_map.get(sel_bt_lbl, sel_bt_lbl)
+        sel_bt_lbl = shobots_bt_combo.get()
+        result["shobots_bt_port"] = bt_dev_map.get(sel_bt_lbl, sel_bt_lbl)
 
         tello_ip = tello_ip_combo.get().strip()
         match = re.match(r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", tello_ip)
@@ -3921,7 +3922,7 @@ if __name__ == "__main__":
         voice_name = choose_voice()
         esp32_left_port = choose_esp32_port()
         esp32_right_port = choose_esp32_port()
-        hexapod_bt_port = choose_hexapod_bt_port()
+        shobots_bt_port = choose_shobots_bt_port()
         tello_port = choose_tello_port()
         tello_ip = choose_tello_ip(tello_port)
     else:
@@ -3932,7 +3933,7 @@ if __name__ == "__main__":
         voice_name = settings["voice_name"]
         esp32_left_port = settings.get("esp32_left_port")
         esp32_right_port = settings.get("esp32_right_port")
-        hexapod_bt_port = settings.get("hexapod_bt_port", "hexapod")
+        shobots_bt_port = settings.get("shobots_bt_port", settings.get("hexapod_bt_port", "shobots"))
         tello_ip = settings.get("tello_ip", "192.168.10.1")
         tello_port = settings.get("tello_port", 8889)
 
@@ -3945,7 +3946,7 @@ if __name__ == "__main__":
         voice_name=voice_name,
         esp32_left_port=esp32_left_port,
         esp32_right_port=esp32_right_port,
-        hexapod_bt_port=hexapod_bt_port,
+        shobots_bt_port=shobots_bt_port,
         tello_ip=tello_ip,
         tello_port=tello_port
     )
