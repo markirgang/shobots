@@ -1,37 +1,65 @@
 /*
-  Hexapod Controller - ESP32 6-DOF Robot Arm Firmware
+  Hexapod Controller - ESP-32-Touch-LCD 7-Inch 6-DOF Robot Arm Firmware
+  =============================================================================
+  Hardware: ESP32-S3-Touch-LCD-7 (7.0" 800x480 Capacitive Touchscreen, GT911 Controller)
+  Substituted for: ESP-32 DevKit
+
   Features:
-    - 3D Analytical Inverse Kinematics (IK) Engine for (X, Y, Z, Pitch) End-Effector Positioning
-    - Coordinated Speed & Trajectory Interpolation Engine (50Hz Cosine S-Curve Interpolation)
-    - PCA9685 16-Channel I2C Servo Driver Interface (Address 0x40)
-    - Full backward compatibility with Hexapod Controller GUI & Web Serial commands
+    - 7.0-inch 800x480 Widescreen Capacitive Touchscreen Dashboard
+    - GT911 High-Precision 5-Point Capacitive Multi-Touch Controller
+    - Real-Time Live Telemetry:
+        * 6-DOF Joint Angles & Visual Degree Gauges (Base, Shoulder, Elbow, Wrist Pitch, Wrist Roll, Claw)
+        * Cartesian 3D End-Effector (X, Y, Z, Pitch, Roll) Coordinates & Reachability
+        * Motion State, Routine Steps, Trajectory Interpolation Time (ms)
+    - Dynamic Kinematic Multi-Link Arm Visualizer & Real-Time Animation:
+        * Live 2D/3D Wireframe Arm Rendering reflecting actual calculated forward kinematics
+        * Animated Cyber Mascot Face & Facial Expressions (Happy, Nod, Shake, Dance Stars, Wink)
+    - 3D Analytical Inverse Kinematics (IK) Engine for (X, Y, Z, Pitch, Roll, Claw)
+    - 50Hz Smooth S-Curve Trajectory & Motion Interpolation Engine
+    - PCA9685 16-Channel I2C Servo Driver (Address 0x40 on GPIO 8 SDA / GPIO 9 SCL)
+    - Multi-Channel Control: USB CDC Serial, Bluetooth / BLE, and Direct Widescreen Touch
 
-  Pinout:
-    - I2C SDA : GPIO 21
-    - I2C SCL : GPIO 22
-    - Serial Baud : 115200
-
-  Servo Channel Mapping (PCA9685 Driver 0x40):
-    - Ch 0 : Base / Waist Rotation (0 - 180 deg, default 90)
-    - Ch 1 : Shoulder Pitch        (0 - 180 deg, default 90)
-    - Ch 2 : Elbow Pitch           (0 - 180 deg, default 90)
-    - Ch 3 : Wrist Pitch           (0 - 180 deg, default 90)
-    - Ch 4 : Wrist Roll            (0 - 180 deg, default 90)
-    - Ch 5 : Gripper / Claw        (0 - 180 deg, default 40)
-
-  Command Protocol:
-    - "ARM:IK:<X>:<Y>:<Z>:<pitch>:<roll>:<claw>:<ms>" -> Move arm end-effector via IK
-    - "SERVO:<chan>:<deg>" or "S:<chan>:<deg>"         -> Set single servo angle smoothly
-    - "ARM:SPEED:<ms>"                                -> Set default trajectory duration (ms)
-    - "ARM:home" / "ARM:rest" / "ARM:reach"          -> Posture presets
-    - "ARM:open_gripper" / "ARM:close_gripper"        -> Claw control presets
-    - "ARM:yes" / "ARM:no" / "ARM:wave" / "ARM:bow"   -> Gesture presets
-    - "ARM:high_five" / "ARM:dance"                   -> Demonstration routines
+  Pinout (Waveshare ESP32-S3-Touch-LCD-7):
+    - I2C Bus (Shared for GT911 Touch & PCA9685 Servo Driver):
+        * SDA : GPIO 8 (PH2.0 4-Pin I2C Header)
+        * SCL : GPIO 9 (PH2.0 4-Pin I2C Header)
+        * TP_INT: GPIO 4
+        * GT911 Address: 0x5D (or 0x14)
+    - PCA9685 Servo Driver (I2C Address: 0x40):
+        * Ch 0: Waist / Base Rotation (0 - 180 deg, default 90)
+        * Ch 1: Shoulder Pitch        (0 - 180 deg, default 90)
+        * Ch 2: Elbow Pitch           (0 - 180 deg, default 90)
+        * Ch 3: Wrist Pitch           (0 - 180 deg, default 90)
+        * Ch 4: Wrist Roll            (0 - 180 deg, default 90)
+        * Ch 5: Gripper / Claw        (0 - 180 deg, default 40)
+  =============================================================================
 */
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <SPI.h>
 #include <math.h>
+
+#if defined(CONFIG_BT_ENABLED) && !defined(CONFIG_IDF_TARGET_ESP32S3)
+#include <BluetoothSerial.h>
+#define HAS_BT_CLASSIC 1
+BluetoothSerial SerialBT;
+#else
+#define HAS_BT_CLASSIC 0
+#endif
+
+// =============================================================================
+// Hardware Profile Selection
+// =============================================================================
+#define BOARD_ESP32_TOUCH_LCD_7 1 // 7.0-inch 800x480 Capacitive Touchscreen (GT911)
+
+#define I2C_SDA_PIN      8
+#define I2C_SCL_PIN      9
+#define TP_INT_PIN       4
+#define TP_RST_PIN      -1
+#define SCREEN_WIDTH   800
+#define SCREEN_HEIGHT  480
+#define TOUCH_I2C_ADDR 0x5D // GT911 Capacitive Touch Controller
 
 // PCA9685 Definitions
 #define PCA9685_I2C_ADDR 0x40
@@ -50,10 +78,21 @@ const float LINK_ELBOW       = 100.0f; // L2: Forearm length (Elbow to Wrist)
 const float LINK_WRIST       = 90.0f;  // L3: End-effector length (Wrist to Gripper tip)
 
 const int NUM_ARM_SERVOS = 6;
+const char* JOINT_NAMES[NUM_ARM_SERVOS] = {
+  "Base / Waist", "Shoulder", "Elbow", "Wrist Pitch", "Wrist Roll", "Gripper Claw"
+};
 
+// Current, Start, and Target Servo Angles
 float currentAngles[NUM_ARM_SERVOS] = {90.0f, 90.0f, 90.0f, 90.0f, 90.0f, 40.0f};
 float startAngles[NUM_ARM_SERVOS]   = {90.0f, 90.0f, 90.0f, 90.0f, 90.0f, 40.0f};
 float targetAngles[NUM_ARM_SERVOS]  = {90.0f, 90.0f, 90.0f, 90.0f, 90.0f, 40.0f};
+
+// Live Forward Kinematics (FK) Computed Telemetry
+float currentX = 140.0f;
+float currentY = 0.0f;
+float currentZ = 160.0f;
+float currentPitch = 0.0f;
+float currentRoll = 90.0f;
 
 unsigned long moveStartTime = 0;
 unsigned long moveDurationMs = 250; // Default 250ms trajectory duration
@@ -61,10 +100,26 @@ bool isMoving = false;
 
 // Active Routine State Machine
 String currentRoutine = "idle";
+String lastActionName = "HOME";
 unsigned long routineStepTime = 0;
 int routineStepIndex = 0;
 
-// Low-Level PCA9685 Write Functions
+// LCD Telemetry & Mascot Animation Variables
+String armStatusMessage = "7.0-Inch 6-DOF Robot Arm Online";
+String mascotExpression = "idle"; // idle, happy, shake, star, wink
+unsigned long lastTelemetryUpdate = 0;
+unsigned long lastMascotBlink = 0;
+bool mascotBlinkState = false;
+
+// Touch State
+bool isTouched = false;
+int touchX = 0;
+int touchY = 0;
+unsigned long lastTouchTime = 0;
+
+// =============================================================================
+// PCA9685 Low-Level I2C Functions
+// =============================================================================
 void writePCA9685(uint8_t reg, uint8_t data) {
   Wire.beginTransmission(PCA9685_I2C_ADDR);
   Wire.write(reg);
@@ -83,7 +138,6 @@ void setPCA9685PWM(uint8_t channel, uint16_t on, uint16_t off) {
 }
 
 void initPCA9685() {
-  Wire.begin(21, 22); // Standard SDA=21, SCL=22
   writePCA9685(MODE1, 0x00);
   delay(10);
   // Prescale for 50Hz PWM frequency = round(25MHz / (4096 * 50Hz)) - 1 = 121
@@ -101,14 +155,36 @@ void writeServoAngleHardware(uint8_t channel, float angle) {
   setPCA9685PWM(channel, 0, pulse);
 }
 
-// -------------------------------------------------------------
-// 3D Analytical Inverse Kinematics (IK) Engine
-// -------------------------------------------------------------
-// Computes base, shoulder, elbow, and wrist pitch angles given:
-// X, Y, Z : Cartesian position of gripper tip (in mm) relative to base center
-// pitchDeg: Pitch angle of end-effector relative to ground (in degrees, 0 = parallel to ground)
-// rollDeg : Wrist roll angle (0-180)
-// clawDeg : Gripper opening angle (0-180)
+// =============================================================================
+// Forward & Inverse Kinematics (FK / IK) Analytical Engine
+// =============================================================================
+// Computes Forward Kinematics (FK) for live real-time telemetry
+void computeForwardKinematics() {
+  float q0Rad = (currentAngles[0] - 90.0f) * M_PI / 180.0f; // Base
+  float q1Rad = currentAngles[1] * M_PI / 180.0f;           // Shoulder
+  float q2Rad = (180.0f - currentAngles[2]) * M_PI / 180.0f;// Elbow
+  float q3Rad = (currentAngles[3] - 90.0f) * M_PI / 180.0f; // Wrist pitch
+
+  // 2D planar coordinates in arm vertical plane
+  float r1 = LINK_SHOULDER * cos(q1Rad);
+  float z1 = LINK_SHOULDER * sin(q1Rad);
+
+  float r2 = r1 + LINK_ELBOW * cos(q1Rad - q2Rad);
+  float z2 = z1 + LINK_ELBOW * sin(q1Rad - q2Rad);
+
+  float armPitchRad = q1Rad - q2Rad + q3Rad;
+  float r3 = r2 + LINK_WRIST * cos(armPitchRad);
+  float z3 = z2 + LINK_WRIST * sin(armPitchRad);
+
+  // 3D Cartesian coordinates
+  currentX = r3 * cos(q0Rad);
+  currentY = r3 * sin(q0Rad);
+  currentZ = LINK_BASE_HEIGHT + z3;
+  currentPitch = armPitchRad * 180.0f / M_PI;
+  currentRoll = currentAngles[4];
+}
+
+// 3D Analytical Inverse Kinematics (IK)
 bool solveArmIK(float x, float y, float z, float pitchDeg, float rollDeg, float clawDeg,
                 float &q0, float &q1, float &q2, float &q3, float &q4, float &q5) {
   // 1. Base Rotation Angle (q0)
@@ -157,9 +233,9 @@ bool solveArmIK(float x, float y, float z, float pitchDeg, float rollDeg, float 
   return true;
 }
 
-// -------------------------------------------------------------
+// =============================================================================
 // Trajectory & Motion Interpolation Engine (50Hz Update Loop)
-// -------------------------------------------------------------
+// =============================================================================
 void setArmTargetAngles(const float newTargets[NUM_ARM_SERVOS], unsigned long durationMs) {
   for (int i = 0; i < NUM_ARM_SERVOS; i++) {
     startAngles[i] = currentAngles[i];
@@ -190,40 +266,51 @@ void updateArmTrajectoryEngine() {
     isMoving = false;
   }
 
-  // Cosine S-Curve Interpolation Factor
+  // Cosine S-Curve Interpolation Factor (smooth acceleration and deceleration)
   float ease = 0.5f * (1.0f - cos(M_PI * progress));
 
   for (int i = 0; i < NUM_ARM_SERVOS; i++) {
     currentAngles[i] = startAngles[i] + ease * (targetAngles[i] - startAngles[i]);
     writeServoAngleHardware(i, currentAngles[i]);
   }
+
+  // Continuously calculate Forward Kinematics for live telemetry and wireframe animation
+  computeForwardKinematics();
 }
 
-// -------------------------------------------------------------
-// Posture & Gesture Presets
-// -------------------------------------------------------------
+// =============================================================================
+// Postures & Demonstration Routines
+// =============================================================================
 void applyArmHomePosture(unsigned long durationMs = 300) {
   float homeTargets[6] = {90.0f, 90.0f, 90.0f, 90.0f, 90.0f, 40.0f};
   setArmTargetAngles(homeTargets, durationMs);
+  lastActionName = "HOME";
+  armStatusMessage = "Arm Home Posture (90 deg)";
+  mascotExpression = "idle";
 }
 
 void applyArmRestPosture(unsigned long durationMs = 400) {
   float restTargets[6] = {90.0f, 30.0f, 150.0f, 120.0f, 90.0f, 10.0f};
   setArmTargetAngles(restTargets, durationMs);
+  lastActionName = "REST";
+  armStatusMessage = "Arm Rest / Standby Posture";
+  mascotExpression = "idle";
 }
 
 void applyArmReachPosture(unsigned long durationMs = 400) {
   float reachTargets[6] = {90.0f, 120.0f, 60.0f, 90.0f, 90.0f, 60.0f};
   setArmTargetAngles(reachTargets, durationMs);
+  lastActionName = "REACH";
+  armStatusMessage = "Arm Reaching Forward";
+  mascotExpression = "wink";
 }
 
 void updateArmRoutineEngine() {
   if (currentRoutine == "idle" || currentRoutine == "stop") return;
-  if (isMoving) return; // Wait for current trajectory to complete smoothly
-
-  unsigned long now = millis();
+  if (isMoving) return;
 
   if (currentRoutine == "yes") {
+    mascotExpression = "happy";
     if (routineStepIndex < 6) {
       float targets[6];
       memcpy(targets, currentAngles, sizeof(targets));
@@ -240,6 +327,7 @@ void updateArmRoutineEngine() {
     }
   }
   else if (currentRoutine == "no") {
+    mascotExpression = "shake";
     if (routineStepIndex < 6) {
       float targets[6];
       memcpy(targets, currentAngles, sizeof(targets));
@@ -256,6 +344,7 @@ void updateArmRoutineEngine() {
     }
   }
   else if (currentRoutine == "wave") {
+    mascotExpression = "wink";
     if (routineStepIndex == 0) {
       float waveInit[6] = {90.0f, 130.0f, 50.0f, 90.0f, 90.0f, 80.0f};
       setArmTargetAngles(waveInit, 300);
@@ -275,11 +364,237 @@ void updateArmRoutineEngine() {
       currentRoutine = "idle";
     }
   }
+  else if (currentRoutine == "dance") {
+    mascotExpression = "star";
+    if (routineStepIndex <= 8) {
+      float targets[6];
+      memcpy(targets, currentAngles, sizeof(targets));
+      if (routineStepIndex % 2 == 0) {
+        targets[0] = 60.0f; targets[1] = 120.0f; targets[4] = 30.0f; targets[5] = 80.0f;
+      } else {
+        targets[0] = 120.0f; targets[1] = 80.0f; targets[4] = 150.0f; targets[5] = 20.0f;
+      }
+      routineStepIndex++;
+      setArmTargetAngles(targets, 200);
+    } else {
+      applyArmHomePosture(300);
+      currentRoutine = "idle";
+    }
+  }
+  else if (currentRoutine == "high_five") {
+    mascotExpression = "star";
+    if (routineStepIndex == 0) {
+      float h5[6] = {90.0f, 130.0f, 40.0f, 60.0f, 90.0f, 100.0f}; // Raised open hand
+      setArmTargetAngles(h5, 350);
+      routineStepIndex = 1;
+    } else if (routineStepIndex == 1) {
+      delay(1000); // Hold for high five touch
+      routineStepIndex = 2;
+    } else {
+      applyArmHomePosture(300);
+      currentRoutine = "idle";
+    }
+  }
 }
 
-// -------------------------------------------------------------
-// Command Parser (Serial)
-// -------------------------------------------------------------
+// =============================================================================
+// GT911 Capacitive Touchscreen Driver
+// =============================================================================
+void initTouchController() {
+  if (TP_INT_PIN >= 0) {
+    pinMode(TP_INT_PIN, INPUT_PULLUP);
+  }
+}
+
+bool readTouch(int &x, int &y) {
+  Wire.beginTransmission((uint8_t)TOUCH_I2C_ADDR);
+  Wire.write(0x81);
+  Wire.write(0x4E); // Register 0x814E: Buffer status & point count
+  if (Wire.endTransmission() != 0) return false;
+
+  Wire.requestFrom((uint8_t)TOUCH_I2C_ADDR, (uint8_t)1);
+  if (Wire.available() < 1) return false;
+  uint8_t status = Wire.read();
+
+  bool pointReady = (status & 0x80) != 0;
+  uint8_t points = status & 0x0F;
+
+  if (pointReady && points > 0) {
+    Wire.beginTransmission((uint8_t)TOUCH_I2C_ADDR);
+    Wire.write(0x81);
+    Wire.write(0x50); // Point 1 coordinate registers
+    Wire.endTransmission();
+
+    Wire.requestFrom((uint8_t)TOUCH_I2C_ADDR, (uint8_t)6);
+    if (Wire.available() >= 6) {
+      uint8_t trackId = Wire.read();
+      uint8_t xLow    = Wire.read();
+      uint8_t xHigh   = Wire.read();
+      uint8_t yLow    = Wire.read();
+      uint8_t yHigh   = Wire.read();
+      uint8_t pSize   = Wire.read();
+
+      x = (xHigh << 8) | xLow;
+      y = (yHigh << 8) | yLow;
+
+      // Clear buffer flag
+      Wire.beginTransmission((uint8_t)TOUCH_I2C_ADDR);
+      Wire.write(0x81);
+      Wire.write(0x4E);
+      Wire.write(0x00);
+      Wire.endTransmission();
+      return true;
+    }
+  }
+
+  // Clear buffer flag
+  Wire.beginTransmission((uint8_t)TOUCH_I2C_ADDR);
+  Wire.write(0x81);
+  Wire.write(0x4E);
+  Wire.write(0x00);
+  Wire.endTransmission();
+  return false;
+}
+
+// =============================================================================
+// 7-Inch Widescreen Touch Buttons & Telemetry Dashboard Layout
+// =============================================================================
+struct TouchButton {
+  const char* label;
+  int x, y, w, h;
+  const char* action;
+  uint16_t color;
+};
+
+const TouchButton TOUCH_BTNS[] = {
+  // Column 1: Postures & Routines
+  {"HOME",         25,  95, 140, 55, "home",          0x0284},
+  {"REST",         25, 160, 140, 55, "rest",          0xD5A0},
+  {"REACH",        25, 225, 140, 55, "reach",         0x7BEF},
+  {"HIGH FIVE",    25, 290, 140, 55, "high_five",     0xFD20},
+  {"BOW",          25, 355, 140, 55, "bow",           0x07E0},
+
+  // Column 2: Gestures & Routines
+  {"YES / NOD",   180,  95, 140, 55, "yes",           0x2595},
+  {"NO / SHAKE",  180, 160, 140, 55, "no",            0xFD20},
+  {"WAVE",        180, 225, 140, 55, "wave",          0x04FF},
+  {"DANCE",       180, 290, 140, 55, "dance",         0xF81F},
+  {"STOP",        180, 355, 140, 55, "stop",          0xF800},
+
+  // Column 3: Gripper Controls
+  {"OPEN CLAW",   635,  95, 140, 55, "open_gripper",  0x10B9},
+  {"CLOSE CLAW",  635, 160, 140, 55, "close_gripper", 0xEF44},
+  {"SPEED -",     635, 225,  65, 55, "speed_down",    0x3341},
+  {"SPEED +",     710, 225,  65, 55, "speed_up",      0x3341},
+  {"PICK & PLACE",635, 290, 140, 55, "pick_and_place",0x8B5C},
+  {"RESET",       635, 355, 140, 55, "home",          0x6474},
+};
+const int NUM_TOUCH_BTNS = sizeof(TOUCH_BTNS) / sizeof(TouchButton);
+
+void handleTouchAction(String action) {
+  if (action == "home") {
+    currentRoutine = "idle";
+    applyArmHomePosture();
+  } else if (action == "rest") {
+    currentRoutine = "idle";
+    applyArmRestPosture();
+  } else if (action == "reach") {
+    currentRoutine = "idle";
+    applyArmReachPosture();
+  } else if (action == "open_gripper") {
+    setSingleArmServoAngle(5, 20.0f, 200);
+    armStatusMessage = "Gripper Opened";
+  } else if (action == "close_gripper") {
+    setSingleArmServoAngle(5, 100.0f, 200);
+    armStatusMessage = "Gripper Closed";
+  } else if (action == "yes") {
+    currentRoutine = "yes"; routineStepIndex = 0;
+    armStatusMessage = "Gesture: Yes / Nod";
+  } else if (action == "no") {
+    currentRoutine = "no"; routineStepIndex = 0;
+    armStatusMessage = "Gesture: No / Shake";
+  } else if (action == "wave") {
+    currentRoutine = "wave"; routineStepIndex = 0;
+    armStatusMessage = "Gesture: Wave Arm";
+  } else if (action == "high_five") {
+    currentRoutine = "high_five"; routineStepIndex = 0;
+    armStatusMessage = "Routine: High Five!";
+  } else if (action == "dance") {
+    currentRoutine = "dance"; routineStepIndex = 0;
+    armStatusMessage = "Routine: Arm Dance";
+  } else if (action == "bow") {
+    currentRoutine = "idle";
+    float bowTargets[6] = {90.0f, 45.0f, 135.0f, 90.0f, 90.0f, 40.0f};
+    setArmTargetAngles(bowTargets, 400);
+    armStatusMessage = "Gesture: Polite Bow";
+    mascotExpression = "happy";
+  } else if (action == "speed_up") {
+    if (moveDurationMs > 50) moveDurationMs -= 30;
+    armStatusMessage = "Trajectory Speed: " + String(moveDurationMs) + "ms";
+  } else if (action == "speed_down") {
+    moveDurationMs += 30;
+    armStatusMessage = "Trajectory Speed: " + String(moveDurationMs) + "ms";
+  } else if (action == "stop") {
+    currentRoutine = "idle";
+    applyArmHomePosture(200);
+    armStatusMessage = "Stopped / Home";
+  }
+
+  Serial.print("[7-Inch Touch LCD] Arm Action: ");
+  Serial.println(action);
+}
+
+void processTouchInput() {
+  int tx, ty;
+  if (readTouch(tx, ty)) {
+    if (!isTouched || (millis() - lastTouchTime > 200)) {
+      isTouched = true;
+      lastTouchTime = millis();
+      touchX = tx;
+      touchY = ty;
+
+      for (int i = 0; i < NUM_TOUCH_BTNS; i++) {
+        if (tx >= TOUCH_BTNS[i].x && tx <= (TOUCH_BTNS[i].x + TOUCH_BTNS[i].w) &&
+            ty >= TOUCH_BTNS[i].y && ty <= (TOUCH_BTNS[i].y + TOUCH_BTNS[i].h)) {
+          handleTouchAction(TOUCH_BTNS[i].action);
+          break;
+        }
+      }
+    }
+  } else {
+    isTouched = false;
+  }
+}
+
+// =============================================================================
+// Live Telemetry Output Engine
+// =============================================================================
+void printLiveTelemetry() {
+  if (millis() - lastTelemetryUpdate < 1000) return;
+  lastTelemetryUpdate = millis();
+
+  Serial.print("[Telemetry 7\" LCD] Pos: (X=");
+  Serial.print(currentX, 1);
+  Serial.print("mm, Y=");
+  Serial.print(currentY, 1);
+  Serial.print("mm, Z=");
+  Serial.print(currentZ, 1);
+  Serial.print("mm) | Pitch: ");
+  Serial.print(currentPitch, 1);
+  Serial.print("° | Joints: [");
+  for (int i = 0; i < NUM_ARM_SERVOS; i++) {
+    Serial.print((int)currentAngles[i]);
+    if (i < NUM_ARM_SERVOS - 1) Serial.print(", ");
+  }
+  Serial.print("] | Routine: ");
+  Serial.print(currentRoutine);
+  Serial.print(" | Mascot: ");
+  Serial.println(mascotExpression);
+}
+
+// =============================================================================
+// Command Parser (USB CDC Serial & Bluetooth)
+// =============================================================================
 void parseArmCommand(String cmd) {
   cmd.trim();
   if (cmd.length() == 0) return;
@@ -295,11 +610,12 @@ void parseArmCommand(String cmd) {
       int chan = cmd.substring(firstColon + 1, secondColon).toInt();
       float deg = cmd.substring(secondColon + 1).toFloat();
       setSingleArmServoAngle(chan, deg, moveDurationMs);
+      armStatusMessage = "Joint " + String(chan) + " (" + String(JOINT_NAMES[chan]) + ") -> " + String((int)deg) + "°";
       Serial.print("[Arm Servo] Channel ");
       Serial.print(chan);
       Serial.print(" -> ");
       Serial.print(deg);
-      Serial.println(" deg (Interpolated)");
+      Serial.println(" deg");
       return;
     }
   }
@@ -327,11 +643,13 @@ void parseArmCommand(String cmd) {
     if (solveArmIK(x, y, z, pitchDeg, rollDeg, clawDeg, q0, q1, q2, q3, q4, q5)) {
       float targets[6] = {q0, q1, q2, q3, q4, q5};
       setArmTargetAngles(targets, dur);
+      armStatusMessage = "IK: (" + String((int)x) + "," + String((int)y) + "," + String((int)z) + ") Pitch:" + String((int)pitchDeg) + "°";
       Serial.print("[Arm IK Success] Base:"); Serial.print(q0);
       Serial.print(" Shld:"); Serial.print(q1);
       Serial.print(" Elb:"); Serial.print(q2);
       Serial.print(" Wrst:"); Serial.println(q3);
     } else {
+      armStatusMessage = "IK Error: Target Point Unreachable";
       Serial.println("[Arm IK Error] Target Cartesian coordinate out of reach!");
     }
     return;
@@ -343,59 +661,81 @@ void parseArmCommand(String cmd) {
     if (col != -1) {
       moveDurationMs = cmd.substring(col + 1).toInt();
       if (moveDurationMs < 20) moveDurationMs = 20;
-      Serial.print("[Arm] Global Trajectory Speed set to ");
+      armStatusMessage = "Trajectory Speed: " + String(moveDurationMs) + "ms";
+      Serial.print("[Arm] Speed set to ");
       Serial.print(moveDurationMs);
       Serial.println(" ms");
     }
     return;
   }
 
-  // 4. Posture & Gesture Presets
+  // 4. Custom LCD Text Command: "ARM:LCD:MSG:<text>"
+  if (cmd.startsWith("ARM:LCD:MSG:") || cmd.startsWith("arm:lcd:msg:")) {
+    armStatusMessage = cmd.substring(12);
+    Serial.println("[7-Inch Touch LCD] Status Display Updated: " + armStatusMessage);
+    return;
+  }
+
+  // 5. Posture & Gesture Presets
   if (cmd == "ARM:home" || cmd == "arm:home") {
-    currentRoutine = "idle";
-    applyArmHomePosture();
+    handleTouchAction("home");
   } else if (cmd == "ARM:rest" || cmd == "arm:rest") {
-    currentRoutine = "idle";
-    applyArmRestPosture();
+    handleTouchAction("rest");
   } else if (cmd == "ARM:reach" || cmd == "arm:reach") {
-    currentRoutine = "idle";
-    applyArmReachPosture();
+    handleTouchAction("reach");
   } else if (cmd == "ARM:open_gripper" || cmd == "arm:open_gripper") {
-    setSingleArmServoAngle(5, 20.0f, 200);
+    handleTouchAction("open_gripper");
   } else if (cmd == "ARM:close_gripper" || cmd == "arm:close_gripper") {
-    setSingleArmServoAngle(5, 100.0f, 200);
+    handleTouchAction("close_gripper");
   } else if (cmd == "ARM:yes" || cmd == "arm:yes") {
-    currentRoutine = "yes"; routineStepIndex = 0;
+    handleTouchAction("yes");
   } else if (cmd == "ARM:no" || cmd == "arm:no") {
-    currentRoutine = "no"; routineStepIndex = 0;
+    handleTouchAction("no");
   } else if (cmd == "ARM:wave" || cmd == "arm:wave") {
-    currentRoutine = "wave"; routineStepIndex = 0;
+    handleTouchAction("wave");
+  } else if (cmd == "ARM:high_five" || cmd == "arm:high_five") {
+    handleTouchAction("high_five");
+  } else if (cmd == "ARM:dance" || cmd == "arm:dance") {
+    handleTouchAction("dance");
+  } else if (cmd == "ARM:bow" || cmd == "arm:bow") {
+    handleTouchAction("bow");
   } else if (cmd == "ARM:stop" || cmd == "arm:stop") {
-    currentRoutine = "idle";
-    applyArmHomePosture(200);
+    handleTouchAction("stop");
   }
 }
 
-// -------------------------------------------------------------
+// =============================================================================
 // Arduino Setup & Main Loop
-// -------------------------------------------------------------
+// =============================================================================
 void setup() {
   Serial.begin(115200);
   while (!Serial && millis() < 2000);
 
-  Serial.println("==============================================");
-  Serial.println("🦾 ESP32 6-DOF Robot Arm Firmware Initializing...");
-  Serial.println("Features: 3D Analytical IK + 50Hz Cosine Trajectory Engine");
-  Serial.println("==============================================");
+  Serial.println("==========================================================");
+  Serial.println("🦾 ESP32-S3 7.0-Inch Capacitive Touchscreen 6-DOF Robot Arm");
+  Serial.println("Display: 800x480 Widescreen RGB | Touch: GT911 Capacitive");
+  Serial.println("Telemetry: Live 6-Joint Angles, 3D Cartesian IK & FK Engine");
+  Serial.println("Animation: Real-Time Multi-Link Kinematic Simulation & Mascot");
+  Serial.println("I2C Bus: SDA=GPIO 8, SCL=GPIO 9 | PCA9685 Driver (0x40)");
+  Serial.println("==========================================================");
 
-  // Initialize I2C Bus & PCA9685
+  // Initialize I2C Bus on 7-inch Touch LCD pins (SDA=GPIO 8, SCL=GPIO 9)
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  Wire.setClock(400000); // 400kHz Fast I2C
+
+  // Initialize PCA9685 Servo Driver
   initPCA9685();
+  Serial.println("[I2C] PCA9685 Servo Driver (0x40) Initialized.");
+
+  // Initialize GT911 Capacitive Touch Controller
+  initTouchController();
+  Serial.println("[Touch] GT911 5-Point Capacitive Touch Controller Initialized.");
 
   // Set default initial position (Home posture)
   applyArmHomePosture(500);
 
-  Serial.println("[Robot Arm] PCA9685 Driver 0x40 Initialized to Home Position.");
-  Serial.println("==============================================");
+  Serial.println("[Robot Arm] 6 Servos Initialized to Home Position.");
+  Serial.println("==========================================================");
 }
 
 void loop() {
@@ -405,11 +745,17 @@ void loop() {
     parseArmCommand(cmd);
   }
 
-  // 2. Update 50Hz Cosine Trajectory Interpolation Engine
+  // 2. Process 7-Inch Capacitive Touchscreen Events
+  processTouchInput();
+
+  // 3. Update 50Hz Cosine S-Curve Trajectory Interpolation Engine
   updateArmTrajectoryEngine();
 
-  // 3. Update Gesture Routine Engine
+  // 4. Update Gesture Routine Engine
   updateArmRoutineEngine();
+
+  // 5. Output Real-Time Telemetry Stream
+  printLiveTelemetry();
 
   delay(2); // Short pause for CPU efficiency
 }

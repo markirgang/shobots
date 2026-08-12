@@ -38,11 +38,13 @@ except ImportError:
 
 
 class TelloController:
-    def __init__(self, ip="192.168.10.1", port=8889):
+    def __init__(self, ip="192.168.10.1", port=8889, audio_loop=None):
         self.drone_address = (ip, port)
+        self.audio_loop = audio_loop
         self.sock = None
         self.sdk_enabled = False
         self.simulated = False  # Start by trying real connection, fallback on failure
+        self.last_telemetry = {}
 
     def init_socket(self):
         if self.sock is None and not self.simulated:
@@ -55,39 +57,76 @@ class TelloController:
                 self.simulated = True
 
     def send_cmd(self, command: str) -> dict:
-        if self.simulated:
-            print(f"\n[Simulated Tello] Executing command: {command}")
-            return {"status": "success", "response": "ok (simulated)"}
-            
-        self.init_socket()
-        try:
-            # Automatically enable SDK mode if not already done
-            if not self.sdk_enabled and command != "command":
-                print("[Tello] Enabling SDK mode...")
-                self.sock.settimeout(3.0)  # Short timeout for initial SDK check
-                self.sock.sendto(b"command", self.drone_address)
-                response, _ = self.sock.recvfrom(1024)
-                print(f"[Tello] SDK response: {response.decode('utf-8').strip()}")
-                self.sdk_enabled = True
+        command = command.strip()
+        
+        # 1. Check if ESP32-S3 7-inch Touch LCD Screen serial connection is active
+        if self.audio_loop and hasattr(self.audio_loop, 'serial_tello') and self.audio_loop.serial_tello and self.audio_loop.serial_tello.is_open:
+            try:
+                conn = self.audio_loop.serial_tello
+                cmd_to_send = f"TELLO:{command}\r\n"
+                print(f"\n[ESP32-S3 7\" LCD Tello Screen] Forwarding command: '{command}'")
+                conn.write(cmd_to_send.encode('utf-8'))
+                conn.flush()
+                
+                # Non-blocking read with timeout to capture response from ESP32 screen
+                import time
+                start_t = time.time()
+                resp_line = "ok (sent to ESP32-S3 screen)"
+                while time.time() - start_t < 1.5:
+                    if conn.in_waiting:
+                        raw_line = conn.readline().decode('utf-8', errors='replace').strip()
+                        if raw_line:
+                            print(f"[ESP32-S3 7\" LCD Tello Response] {raw_line}")
+                            if "Response:" in raw_line or "Command:" in raw_line or "ok" in raw_line.lower():
+                                resp_line = raw_line
+                                break
+                    time.sleep(0.05)
+                
+                return {
+                    "status": "success",
+                    "response": resp_line,
+                    "bridge": "ESP32-S3 7\" Touch LCD",
+                    "command": command
+                }
+            except Exception as e:
+                print(f"[ESP32-S3 7\" LCD Tello Error] Serial bridge error: {e}. Falling back to UDP/Simulation.")
 
-            print(f"[Tello] Sending command: {command}")
-            # Use a longer timeout for control commands as actions like takeoff, land, or flip take time
-            self.sock.settimeout(15.0)
-            self.sock.sendto(command.encode('utf-8'), self.drone_address)
-            response, _ = self.sock.recvfrom(1024)
-            res_str = response.decode('utf-8').strip()
-            print(f"[Tello] Response: {res_str}")
-            return {"status": "success", "response": res_str}
-        except (socket.timeout, socket.error) as e:
-            if not self.sdk_enabled:
-                # Fall back to simulation if the physical drone isn't reachable initially
-                print(f"[Tello] Initial connection/SDK activation failed ({e}). Falling back to simulation mode.")
-                self.simulated = True
-                return {"status": "success", "response": "ok (simulated fallback)", "simulated": True}
-            else:
-                # If SDK mode was already enabled, it's a temporary timeout or connection glitch
-                print(f"[Tello] Command '{command}' failed or timed out ({e}). Retaining connection.")
-                return {"status": "error", "message": f"Command execution failed: {e}"}
+        # 2. Fallback to direct PC UDP socket if configured & not in simulation mode
+        if not self.simulated:
+            self.init_socket()
+            try:
+                # Automatically enable SDK mode if not already done
+                if not self.sdk_enabled and command != "command":
+                    print("[Tello UDP] Enabling SDK mode...")
+                    self.sock.settimeout(3.0)
+                    self.sock.sendto(b"command", self.drone_address)
+                    response, _ = self.sock.recvfrom(1024)
+                    print(f"[Tello UDP] SDK response: {response.decode('utf-8').strip()}")
+                    self.sdk_enabled = True
+
+                print(f"[Tello UDP] Sending command: {command}")
+                self.sock.settimeout(15.0)
+                self.sock.sendto(command.encode('utf-8'), self.drone_address)
+                response, _ = self.sock.recvfrom(1024)
+                res_str = response.decode('utf-8').strip()
+                print(f"[Tello UDP] Response: {res_str}")
+                return {"status": "success", "response": res_str, "bridge": "Direct UDP", "command": command}
+            except (socket.timeout, socket.error) as e:
+                if not self.sdk_enabled:
+                    print(f"[Tello UDP] Initial connection/SDK activation failed ({e}). Falling back to simulation mode.")
+                    self.simulated = True
+                else:
+                    print(f"[Tello UDP] Command '{command}' failed or timed out ({e}). Retaining connection.")
+                    return {"status": "error", "message": f"Command execution failed: {e}", "command": command}
+
+        # 3. Simulated Fallback Mode
+        print(f"\n[Simulated Tello / ESP32 Bridge] Executing command: {command}")
+        return {
+            "status": "success",
+            "response": "ok (simulated - ESP32-S3 Screen / Tello offline)",
+            "simulated": True,
+            "command": command
+        }
 
 
 class LevitonController:
@@ -376,19 +415,44 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
 
         function_declarations.append(
             types.FunctionDeclaration(
+                name="trigger_bird_routine",
+                description=(
+                    "Triggers an automated choreography, light show, or animated performance routine on the unified Waveshare 7-inch Touch LCD ESP32 controller (with MCP23017 and dual PCA9685 servo drivers). "
+                    "Supported routines: 'sing' (Parrot singing, beak animation, chirping and head movement), "
+                    "'sweep' (Spotlight sweeping beam choreography), "
+                    "'dance' (Center turntable rotation and bird dancing), "
+                    "'lightshow' (Chasing pulse light show across all bird LEDs and outputs), "
+                    "'symphony' (Synchronized multi-bird performance), "
+                    "'home' (Resets all servos to 90 degrees and turns all lights off)."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "routine": {
+                            "type": "string",
+                            "description": "Routine name: 'sing', 'sweep', 'dance', 'lightshow', 'symphony', 'home'."
+                        }
+                    },
+                    "required": ["routine"]
+                }
+            )
+        )
+
+        function_declarations.append(
+            types.FunctionDeclaration(
                 name="control_hexapod",
                 description=(
-                    "Controls the 6-leg ESP32 hexapod robot over Bluetooth (broadcast name: 'hexapod'). "
-                    "Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow'. "
-                    "Can also adjust individual leg joints (leg_name: 'FL', 'ML', 'RL', 'FR', 'MR', 'RR', joint_name: 'coxa', 'femur', 'tibia') "
-                    "or set 3D Inverse Kinematics (IK) foot position (x, y, z in mm)."
+                    "Controls the 6-leg Hexapod robot driven by the ESP-32-Touch-LCD controller (over Bluetooth 'hexapod-touch-lcd' or USB serial). "
+                    "Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message'. "
+                    "Can also adjust individual leg joints (leg_name: 'FL', 'ML', 'RL', 'FR', 'MR', 'RR', joint_name: 'coxa', 'femur', 'tibia'), "
+                    "set 3D Inverse Kinematics (IK) foot position (x, y, z in mm), or display custom status text on the robot's onboard Touch LCD screen."
                 ),
                 parameters={
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
-                            "description": "Motion preset or action to perform: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_joint', 'set_ik'."
+                            "description": "Motion preset or action to perform: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_joint', 'set_ik', 'set_lcd_message'."
                         },
                         "leg_name": {
                             "type": "string",
@@ -417,6 +481,10 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
                         "duration": {
                             "type": "integer",
                             "description": "Trajectory move duration in milliseconds (default 200)."
+                        },
+                        "lcd_message": {
+                            "type": "string",
+                            "description": "Custom message or expression text to display on the onboard ESP-32-Touch-LCD screen."
                         }
                     },
                     "required": ["action"]
@@ -516,7 +584,7 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         types.FunctionDeclaration(
             name="control_robot_arm",
             description=(
-                "Controls a 6 degrees of freedom (6-DOF) Robot Arm connected to an ESP32 via a PCA9685 servo driver. "
+                "Controls a 6 degrees of freedom (6-DOF) Robot Arm driven by an ESP32-S3-Touch-LCD-7 (7.0-inch Capacitive Touchscreen with live telemetry and animation) via a PCA9685 servo driver. "
                 "Allows triggering gestures ('yes', 'no', 'high_five', 'wave', 'bow', 'dance'), "
                 "executing preset demonstration motions ('home', 'rest', 'reach', 'pick_and_place', 'open_gripper', 'close_gripper', 'stop'), "
                 "setting individual joint angles (channel 0: Base, 1: Shoulder, 2: Elbow, 3: Wrist Pitch, 4: Wrist Roll, 5: Gripper), "
@@ -576,7 +644,10 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
     system_instruction = (
         "You are a helpful real-time multimodal voice assistant running on the user's local computer. "
         "You have direct access to local hardware and smart devices: an onboard LED of an ESP32 microcontroller, "
-        "a 6-leg ESP32 hexapod robot over Bluetooth (broadcast: hexapod), a 6-DOF ESP32 Robot Arm via PCA9685, a Tello drone, Leviton smart lights, and eWeLink (Sonoff) devices.\n\n"
+        "a 6-leg Hexapod robot powered by the ESP-32-Touch-LCD controller (Bluetooth: 'hexapod-touch-lcd' / Serial) with an onboard interactive touch screen, "
+        "a 6-DOF Robot Arm powered by an ESP32-S3-Touch-LCD-7 (7.0-inch Capacitive Touchscreen with live telemetry & animation) via PCA9685, "
+        "a Birds & LED stage controller powered by a unified Waveshare ESP32-S3-Touch-LCD-7 (7.0-inch 800x480 Capacitive Touchscreen with MCP23017 I/O Expander, Dual PCA9685 Servo Drivers, animated parrot mascot, and light shows), "
+        "a Tello drone, Leviton smart lights, and eWeLink (Sonoff) devices.\n\n"
         "1. VISUAL MODALITY AWARENESS:\n"
         "   - You are receiving a continuous, real-time video stream (from the user's webcam or screen share).\n"
         "   - Pay close attention to what you see. You MUST proactively notice, react to, and comment on objects, gestures, text, or visual changes shown in the video feed. Do NOT wait for the user to prompt you or say they are showing you something; describe what you see naturally as part of the conversation.\n"
@@ -585,8 +656,9 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         "   - The video stream is sent to you at exactly 1 frame per second (1 FPS). Each frame you receive represents exactly 1 second of real time.\n"
         "   - When estimating time or counting seconds (e.g., if the user asks you to wait 5 seconds, count seconds, or track time), use the number of incoming frames as your clock (e.g. 5 frames = 5 seconds). Do not rush or estimate time based on text-generation speeds; wait for the appropriate amount of time to pass.\n\n"
         "3. HARDWARE CONTROL:\n"
-        "   - Robot Arm: You MUST use the `control_robot_arm` tool when the user asks verbally or visually to control the 6-DOF robot arm, perform gestures like 'yes', 'no', 'high_five', 'wave', 'bow', 'dance', execute pick & place, or set arm joint angles.\n"
-        "   - Hexapod Robot: You MUST use the `control_hexapod` tool when the user asks verbally or visually to control the 6-leg hexapod robot (e.g. walk, run, wave left arm, wave right arm, dance, sit, stand, flat to floor, turn left, turn right, bow, or set leg joints).\n"
+        "   - Bird Routines & Animations: You MUST use the `trigger_bird_routine` tool when the user asks verbally or visually to perform singing ('sing'), spotlight sweeping ('sweep'), turntable dancing ('dance'), light shows ('lightshow'), bird symphony ('symphony'), or return to home ('home') on the Waveshare 7-inch Touch LCD controller.\n"
+        "   - Robot Arm: You MUST use the `control_robot_arm` tool when the user asks verbally or visually to control the 6-DOF robot arm powered by the ESP32-S3-Touch-LCD-7, perform gestures like 'yes', 'no', 'high_five', 'wave', 'bow', 'dance', execute pick & place, or set arm joint angles.\n"
+        "   - Hexapod Robot: You MUST use the `control_hexapod` tool when the user asks verbally or visually to control the 6-leg hexapod robot powered by the ESP-32-Touch-LCD (e.g. walk, run, wave left arm, wave right arm, dance, sit, stand, flat to floor, turn left, turn right, bow, set leg joints, or display messages on the robot's screen).\n"
         "   - ESP32 PCA9685 Servos: You MUST use the `set_servo_angle` tool when the user asks verbally or visually to move, position, turn, or adjust any of the servos on the Left, Right, or Arm ESP32 (e.g. Left/Right Parrot Up/Dn, Right Spotlight Rotate, Center Bird Up/Dn, Center Turntable Rotate, Base/Shoulder/Elbow, etc.) to a specific degree angle (0 to 180 degrees).\n"
         "   - ESP32 LED: You MUST use the `set_led_state` tool to turn the LED on or off. If the user asks you to pulse, blink, or flash the LED a certain number of times (e.g., to match the count of fingers you see in the frame), you MUST use the `pulse_led` tool with the appropriate count.\n"
         "   - Tello Drone: You MUST use the `send_tello_command` tool to control the Tello drone when the user asks you to perform actions like takeoff, landing, moving, flipping, or rotating.\n"
@@ -781,22 +853,24 @@ def load_esp32_button_config():
 
 def scan_and_autodetect_esp32_ports():
     """
-    Scans system serial ports for connected ESP32 or USB-to-UART bridge devices.
+    Scans system serial ports for connected ESP32, Waveshare 7" Touch-LCD (Birds / Arm / Tello), or USB-to-UART bridge devices.
     Returns:
       display_options: list of human-readable labels for Comboboxes
       device_map: dict mapping label -> raw device name (e.g. 'COM3')
-      detected_left_label: label for auto-detected Left ESP32
-      detected_right_label: label for auto-detected Right ESP32
+      detected_left_label: label for auto-detected Left / Unified Waveshare 7" ESP32
+      detected_right_label: label for auto-detected Right ESP32 (or fallback to Unified)
       detected_arm_label: label for auto-detected Arm ESP32
+      detected_tello_label: label for auto-detected Tello ESP32-S3 7" Touch LCD Screen
     """
     esp32_keywords = [
         "cp210", "ch340", "ch341", "ft232", "esp32", "usb-serial", "usb serial",
-        "silicon labs", "uart", "serial port", "prolific"
+        "silicon labs", "uart", "serial port", "prolific", "waveshare"
     ]
 
     display_options = ["None (Simulation Mode)"]
     device_map = {"None (Simulation Mode)": None}
     esp32_candidate_labels = []
+    tello_specific_label = None
 
     try:
         import serial.tools.list_ports
@@ -804,12 +878,20 @@ def scan_and_autodetect_esp32_ports():
         for p in ports:
             dev = p.device
             desc = p.description or ""
-            label = f"{dev} ({desc})" if desc and desc != dev else dev
+            comb = f"{dev} {desc}".lower()
+            if "tello" in comb or "drone" in comb:
+                label = f"{dev} - Tello / Waveshare 7\" Touch-LCD ({desc})"
+                tello_specific_label = label
+            elif "touch" in comb or "waveshare" in comb or "esp32-s3" in comb or "esp32s3" in comb:
+                label = f"{dev} - Waveshare 7\" Touch-LCD ({desc})"
+            elif desc and desc != dev:
+                label = f"{dev} ({desc})"
+            else:
+                label = dev
             display_options.append(label)
             device_map[label] = dev
 
-            combined = f"{dev} {desc}".lower()
-            if any(k in combined for k in esp32_keywords):
+            if any(k in comb for k in esp32_keywords):
                 esp32_candidate_labels.append(label)
             else:
                 esp32_candidate_labels.append(label)
@@ -817,23 +899,25 @@ def scan_and_autodetect_esp32_ports():
         print(f"[COM Scan Error] {e}")
 
     detected_left_label = esp32_candidate_labels[0] if len(esp32_candidate_labels) > 0 else "None (Simulation Mode)"
-    detected_right_label = esp32_candidate_labels[1] if len(esp32_candidate_labels) > 1 else "None (Simulation Mode)"
-    detected_arm_label = esp32_candidate_labels[2] if len(esp32_candidate_labels) > 2 else "None (Simulation Mode)"
+    detected_right_label = esp32_candidate_labels[1] if len(esp32_candidate_labels) > 1 else detected_left_label
+    detected_arm_label = esp32_candidate_labels[2] if len(esp32_candidate_labels) > 2 else (esp32_candidate_labels[1] if len(esp32_candidate_labels) > 1 else "None (Simulation Mode)")
+    detected_tello_label = tello_specific_label or (esp32_candidate_labels[3] if len(esp32_candidate_labels) > 3 else (esp32_candidate_labels[0] if len(esp32_candidate_labels) > 0 else "None (Simulation Mode)"))
 
-    return display_options, device_map, detected_left_label, detected_right_label, detected_arm_label
+    return display_options, device_map, detected_left_label, detected_right_label, detected_arm_label, detected_tello_label
 
 
 def scan_bluetooth_ports():
     """
-    Scans system serial / Bluetooth ports for connected ESP32 Bluetooth devices (broadcast: hexapod).
+    Scans system serial / Bluetooth ports for connected ESP-32-Touch-LCD Hexapod devices (broadcast: hexapod-touch-lcd / hexapod).
     Returns:
       display_options: list of human-readable labels for Comboboxes
       device_map: dict mapping label -> raw device name or BT broadcast identifier
-      detected_bt_label: label for auto-detected Bluetooth device
+      detected_bt_label: label for auto-detected Bluetooth / Serial device
     """
-    display_options = ["hexapod (Bluetooth Broadcast)", "None (Simulation Mode)"]
+    display_options = ["hexapod-touch-lcd (ESP-32-Touch-LCD BT/Serial)", "hexapod (Legacy BT Broadcast)", "None (Simulation Mode)"]
     device_map = {
-        "hexapod (Bluetooth Broadcast)": "hexapod",
+        "hexapod-touch-lcd (ESP-32-Touch-LCD BT/Serial)": "hexapod-touch-lcd",
+        "hexapod (Legacy BT Broadcast)": "hexapod",
         "None (Simulation Mode)": "None"
     }
 
@@ -843,11 +927,11 @@ def scan_bluetooth_ports():
         for p in ports:
             dev = p.device
             desc = p.description or ""
-            label = f"{dev} - Bluetooth ({desc})" if "bluetooth" in desc.lower() else f"{dev} ({desc})"
+            label = f"{dev} - ESP-32-Touch-LCD ({desc})" if ("touch" in desc.lower() or "esp32" in desc.lower()) else (f"{dev} - Bluetooth ({desc})" if "bluetooth" in desc.lower() else f"{dev} ({desc})")
             display_options.append(label)
             device_map[label] = dev
     except Exception as e:
-        print(f"[Bluetooth Scan Error] {e}")
+        print(f"[Bluetooth/Serial Scan Error] {e}")
 
     detected_bt_label = display_options[0]
     return display_options, device_map, detected_bt_label
@@ -855,19 +939,19 @@ def scan_bluetooth_ports():
 
 def choose_hexapod_bt_port():
     options, dev_map, auto_lbl = scan_bluetooth_ports()
-    print("\nScanning for Bluetooth ESP32 Hexapod connections...")
+    print("\nScanning for ESP-32-Touch-LCD Hexapod connections...")
     for idx, opt in enumerate(options):
         print(f"  [{idx + 1}] {opt}")
-    choice = input(f"Select Hexapod Bluetooth connection [1-{len(options)}, default: 1 ({auto_lbl})]: ").strip()
+    choice = input(f"Select Hexapod ESP-32-Touch-LCD connection [1-{len(options)}, default: 1 ({auto_lbl})]: ").strip()
     if not choice:
-        return dev_map.get(auto_lbl, "hexapod")
+        return dev_map.get(auto_lbl, "hexapod-touch-lcd")
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(options):
             return dev_map.get(options[idx], options[idx])
     except ValueError:
         return choice
-    return dev_map.get(auto_lbl, "hexapod")
+    return dev_map.get(auto_lbl, "hexapod-touch-lcd")
 
 
 # Compatibility alias
@@ -876,8 +960,8 @@ choose_shobots_bt_port = choose_hexapod_bt_port
 
 class HexapodController:
     """
-    Controller for a 6-Leg Hexapod Robot having an ESP32 connected to 2 PCA9685 Servo Drivers over Bluetooth.
-    Bluetooth Broadcast Name: 'hexapod'
+    Controller for a 6-Leg Hexapod Robot having an ESP-32-Touch-LCD connected to 2 PCA9685 Servo Drivers over Bluetooth or USB-CDC Serial.
+    Bluetooth Broadcast Name: 'hexapod-touch-lcd' / 'hexapod'
 
     6 Legs with 3 Degrees of Freedom (DoF) each = 18 Servos total:
       Legs:
@@ -898,7 +982,7 @@ class HexapodController:
         "RR": {"name": "Rear Right",   "driver": 2, "channels": {"coxa": 6, "femur": 7, "tibia": 8}},
     }
 
-    def __init__(self, bt_port="hexapod"):
+    def __init__(self, bt_port="hexapod-touch-lcd"):
         self.bt_port = bt_port
         self.serial_conn = None
         self.simulated = True
@@ -930,7 +1014,7 @@ class HexapodController:
                 except Exception:
                     pass
             self.serial_conn = None
-            return True, "Hexapod Bluetooth set to Simulation Mode"
+            return True, "Hexapod ESP-32-Touch-LCD set to Simulation Mode"
 
         try:
             target = self.bt_port
@@ -939,7 +1023,7 @@ class HexapodController:
                 if target in d_map:
                     target = d_map[target]
                 else:
-                    target = "hexapod"
+                    target = "hexapod-touch-lcd"
 
             if target.upper().startswith("COM") or target.startswith("/dev/"):
                 conn = serial.Serial()
@@ -949,16 +1033,16 @@ class HexapodController:
                 conn.open()
                 self.serial_conn = conn
                 self.simulated = False
-                self.connected_device = f"Bluetooth ({target})"
-                return True, f"Connected to Hexapod ESP32 via Bluetooth on {target}"
+                self.connected_device = f"ESP-32-Touch-LCD ({target})"
+                return True, f"Connected to Hexapod ESP-32-Touch-LCD on {target}"
             else:
                 self.simulated = True
-                self.connected_device = f"Bluetooth Broadcast 'hexapod' (Simulated)"
-                return True, f"Hexapod Bluetooth ('hexapod') connected (Simulated mode)"
+                self.connected_device = f"ESP-32-Touch-LCD '{target}' (Simulated)"
+                return True, f"Hexapod ESP-32-Touch-LCD ('{target}') connected (Simulated mode)"
         except Exception as e:
             self.simulated = True
             self.connected_device = f"Simulation Mode (Error: {e})"
-            return True, f"Hexapod Bluetooth fallback to Simulation Mode ({e})"
+            return True, f"Hexapod ESP-32-Touch-LCD fallback to Simulation Mode ({e})"
 
     def send_bt_command(self, cmd_str: str):
         if self.serial_conn and self.serial_conn.is_open:
@@ -1056,8 +1140,16 @@ class HexapodController:
             self.send_bt_command("HEX:stop\r\n")
             return {"status": "success", "action": "stop", "message": "Hexapod motion stopped"}
 
+        elif action == "set_lcd_message":
+            return {"status": "success", "action": "set_lcd_message", "message": "ESP-32-Touch-LCD message updated"}
+
         else:
             return {"status": "error", "message": f"Unknown hexapod action '{action_name}'"}
+
+    def set_lcd_message(self, message: str) -> dict:
+        """Sends a custom status/message string to display on the ESP-32-Touch-LCD screen."""
+        self.send_bt_command(f"HEX:LCD:MSG:{message}\r\n")
+        return {"status": "success", "message": f"Sent LCD Message to ESP-32-Touch-LCD: '{message}'"}
 
     def _apply_posture(self, joint_angles: dict):
         for leg_code in self.LEGS:
@@ -1510,31 +1602,38 @@ class ESP32PulseWindow:
         ports_frame.pack(fill="x")
 
         # Left COM selector
-        ttk.Label(ports_frame, text="ESP32 Left:").grid(row=0, column=0, sticky="w", padx=(0, 5))
-        self.left_combo = ttk.Combobox(ports_frame, state="readonly", width=18)
-        self.left_combo.grid(row=0, column=1, sticky="w", padx=(0, 8))
+        ttk.Label(ports_frame, text="Birds (L):").grid(row=0, column=0, sticky="w", padx=(0, 3))
+        self.left_combo = ttk.Combobox(ports_frame, state="readonly", width=13)
+        self.left_combo.grid(row=0, column=1, sticky="w", padx=(0, 5))
 
         # Right COM selector
-        ttk.Label(ports_frame, text="ESP32 Right:").grid(row=0, column=2, sticky="w", padx=(0, 5))
-        self.right_combo = ttk.Combobox(ports_frame, state="readonly", width=18)
-        self.right_combo.grid(row=0, column=3, sticky="w", padx=(0, 8))
+        ttk.Label(ports_frame, text="Birds (R):").grid(row=0, column=2, sticky="w", padx=(0, 3))
+        self.right_combo = ttk.Combobox(ports_frame, state="readonly", width=13)
+        self.right_combo.grid(row=0, column=3, sticky="w", padx=(0, 5))
 
         # Arm COM selector
-        ttk.Label(ports_frame, text="ESP32 Arm:").grid(row=0, column=4, sticky="w", padx=(0, 5))
-        self.arm_combo = ttk.Combobox(ports_frame, state="readonly", width=18)
-        self.arm_combo.grid(row=0, column=5, sticky="w", padx=(0, 8))
+        ttk.Label(ports_frame, text="Arm:").grid(row=0, column=4, sticky="w", padx=(0, 3))
+        self.arm_combo = ttk.Combobox(ports_frame, state="readonly", width=13)
+        self.arm_combo.grid(row=0, column=5, sticky="w", padx=(0, 5))
+
+        # Tello 7" LCD Screen COM selector
+        ttk.Label(ports_frame, text="Tello Screen:").grid(row=0, column=6, sticky="w", padx=(0, 3))
+        self.tello_combo = ttk.Combobox(ports_frame, state="readonly", width=14)
+        self.tello_combo.grid(row=0, column=7, sticky="w", padx=(0, 6))
 
         def refresh_com_ports(auto_connect=False):
-            options, dev_map, auto_l, auto_r, auto_arm = scan_and_autodetect_esp32_ports()
+            options, dev_map, auto_l, auto_r, auto_arm, auto_tello = scan_and_autodetect_esp32_ports()
             self.port_device_map = dev_map
 
             self.left_combo['values'] = options
             self.right_combo['values'] = options
             self.arm_combo['values'] = options
+            self.tello_combo['values'] = options
 
             curr_l_dev = self.audio_loop.esp32_left_port
             curr_r_dev = self.audio_loop.esp32_right_port
             curr_arm_dev = self.audio_loop.esp32_arm_port
+            curr_tello_dev = getattr(self.audio_loop, 'esp32_tello_port', None)
 
             match_l = [lbl for lbl, dev in dev_map.items() if dev == curr_l_dev] if curr_l_dev else []
             if match_l:
@@ -1560,6 +1659,14 @@ class ESP32PulseWindow:
             else:
                 self.arm_combo.set("None (Simulation Mode)")
 
+            match_tello = [lbl for lbl, dev in dev_map.items() if dev == curr_tello_dev] if curr_tello_dev else []
+            if match_tello:
+                self.tello_combo.set(match_tello[0])
+            elif auto_tello in options:
+                self.tello_combo.set(auto_tello)
+            else:
+                self.tello_combo.set("None (Simulation Mode)")
+
             if auto_connect:
                 on_update_ports()
             else:
@@ -1569,16 +1676,22 @@ class ESP32PulseWindow:
             sel_l_lbl = self.left_combo.get()
             sel_r_lbl = self.right_combo.get()
             sel_arm_lbl = self.arm_combo.get()
+            sel_tello_lbl = self.tello_combo.get()
             dev_l = self.port_device_map.get(sel_l_lbl, sel_l_lbl)
             dev_r = self.port_device_map.get(sel_r_lbl, sel_r_lbl)
             dev_arm = self.port_device_map.get(sel_arm_lbl, sel_arm_lbl)
+            dev_tello = self.port_device_map.get(sel_tello_lbl, sel_tello_lbl)
             _, msg_l = self.audio_loop.connect_esp32("left", dev_l)
             _, msg_r = self.audio_loop.connect_esp32("right", dev_r)
             _, msg_arm = self.audio_loop.connect_esp32("arm", dev_arm)
-            self.update_status(f"{msg_l} | {msg_r} | {msg_arm}")
+            _, msg_tello = self.audio_loop.connect_esp32("tello", dev_tello)
+            if hasattr(self, 'drone_status_lbl') and self.drone_status_lbl:
+                t_port_str = getattr(self.audio_loop, 'esp32_tello_port', None) or 'Simulation Mode'
+                self.drone_status_lbl.config(text=f"ESP32-S3 7\" Touch LCD Status: {t_port_str}")
+            self.update_status(f"{msg_l} | {msg_arm} | {msg_tello}")
 
         def on_connect_arm_port():
-            options, dev_map, _, _, auto_arm = scan_and_autodetect_esp32_ports()
+            options, dev_map, _, _, auto_arm, _ = scan_and_autodetect_esp32_ports()
             self.port_device_map = dev_map
             self.arm_combo['values'] = options
             sel_arm_lbl = self.arm_combo.get()
@@ -1591,9 +1704,24 @@ class ESP32PulseWindow:
                 self.arm_status_lbl.config(text=f"Status: ESP32 Arm Port - {self.audio_loop.esp32_arm_port or 'Simulation Mode'}")
             self.update_status(f"[Arm ESP32 Connection] {msg_arm}")
 
+        def on_connect_tello_port():
+            options, dev_map, _, _, _, auto_tello = scan_and_autodetect_esp32_ports()
+            self.port_device_map = dev_map
+            self.tello_combo['values'] = options
+            sel_tello_lbl = self.tello_combo.get()
+            if not sel_tello_lbl or sel_tello_lbl not in options:
+                sel_tello_lbl = auto_tello if auto_tello in options else "None (Simulation Mode)"
+                self.tello_combo.set(sel_tello_lbl)
+            dev_tello = self.port_device_map.get(sel_tello_lbl, sel_tello_lbl)
+            _, msg_tello = self.audio_loop.connect_esp32("tello", dev_tello)
+            if hasattr(self, 'drone_status_lbl') and self.drone_status_lbl:
+                t_port_str = getattr(self.audio_loop, 'esp32_tello_port', None) or 'Simulation Mode'
+                self.drone_status_lbl.config(text=f"ESP32-S3 7\" Touch LCD Status: {t_port_str}")
+            self.update_status(f"[Tello ESP32 Screen Connection] {msg_tello}")
+
         connect_btn = tk.Button(
             ports_frame,
-            text="Connect Ports",
+            text="⚡ Connect All",
             font=("Segoe UI", 9, "bold"),
             bg="#0284c7",
             fg="#ffffff",
@@ -1601,14 +1729,14 @@ class ESP32PulseWindow:
             activeforeground="#ffffff",
             relief="flat",
             cursor="hand2",
-            padx=8,
+            padx=6,
             command=on_update_ports
         )
-        connect_btn.grid(row=0, column=6, padx=3)
+        connect_btn.grid(row=0, column=8, padx=2)
 
         connect_arm_btn = tk.Button(
             ports_frame,
-            text="🔌 Connect Arm",
+            text="🔌 Arm",
             font=("Segoe UI", 9, "bold"),
             bg="#7c3aed",
             fg="#ffffff",
@@ -1616,14 +1744,29 @@ class ESP32PulseWindow:
             activeforeground="#ffffff",
             relief="flat",
             cursor="hand2",
-            padx=8,
+            padx=6,
             command=on_connect_arm_port
         )
-        connect_arm_btn.grid(row=0, column=7, padx=3)
+        connect_arm_btn.grid(row=0, column=9, padx=2)
+
+        connect_tello_btn = tk.Button(
+            ports_frame,
+            text="🚁 Tello LCD",
+            font=("Segoe UI", 9, "bold"),
+            bg="#059669",
+            fg="#ffffff",
+            activebackground="#047857",
+            activeforeground="#ffffff",
+            relief="flat",
+            cursor="hand2",
+            padx=6,
+            command=on_connect_tello_port
+        )
+        connect_tello_btn.grid(row=0, column=10, padx=2)
 
         scan_btn = tk.Button(
             ports_frame,
-            text="🔄 Rescan Ports",
+            text="🔄 Rescan",
             font=("Segoe UI", 9, "bold"),
             bg="#334155",
             fg="#f8fafc",
@@ -1631,10 +1774,10 @@ class ESP32PulseWindow:
             activeforeground="#ffffff",
             relief="flat",
             cursor="hand2",
-            padx=8,
+            padx=6,
             command=lambda: refresh_com_ports(auto_connect=True)
         )
-        scan_btn.grid(row=0, column=8, padx=3)
+        scan_btn.grid(row=0, column=11, padx=2)
 
         # Status readout
         self.status_label = ttk.Label(header_frame, text="Status: Ready for commands", font=("Segoe UI", 10, "italic"), foreground="#a855f7")
@@ -1646,18 +1789,49 @@ class ESP32PulseWindow:
         # Divider
         ttk.Separator(self.root, orient="horizontal").pack(fill="x", padx=15, pady=2)
 
+        # Choreography & Light Routines Bar
+        routine_frame = ttk.LabelFrame(self.root, text=" 🎭 Waveshare 7\" Touch-LCD Birds Choreography & Light Routines (esp32_Birds.ino) ", padding=6)
+        routine_frame.pack(fill="x", padx=15, pady=(2, 6))
+
+        def trigger_routine(r_name):
+            self.audio_loop.execute_bird_routine(r_name)
+
+        r_btns = [
+            ("🦜 Parrot Sing", "sing", "#0284c7"),
+            ("💡 Spotlight Sweep", "sweep", "#059669"),
+            ("🔄 Turntable Dance", "dance", "#d97706"),
+            ("🌟 Light Show", "lightshow", "#7c3aed"),
+            ("🎶 Bird Symphony", "sing", "#db2777"),
+            ("🏠 All Home (90°)", "home", "#475569"),
+        ]
+        for col_idx, (r_label, r_code, r_color) in enumerate(r_btns):
+            r_btn = tk.Button(
+                routine_frame,
+                text=r_label,
+                font=("Segoe UI", 9, "bold"),
+                bg=r_color,
+                fg="#ffffff",
+                relief="flat",
+                cursor="hand2",
+                padx=8,
+                pady=3,
+                command=lambda rc=r_code: trigger_routine(rc)
+            )
+            r_btn.grid(row=0, column=col_idx, padx=3, pady=2, sticky="ew")
+            routine_frame.columnconfigure(col_idx, weight=1)
+
         # Tabbed Notebook Interface
         notebook = ttk.Notebook(self.root, padding=6)
         notebook.pack(fill="both", expand=True, padx=10, pady=5)
 
         # --- TAB 1: GPIO BUTTONS ---
         tab_gpio = ttk.Frame(notebook, padding=10)
-        notebook.add(tab_gpio, text=" 🔘 GPIO Pin Controls ")
+        notebook.add(tab_gpio, text=" 🦜 Birds & Lights Outputs ")
 
         tab_gpio.columnconfigure(0, weight=1)
         tab_gpio.columnconfigure(1, weight=1)
 
-        left_box = ttk.LabelFrame(tab_gpio, text=" 👈 ESP32 Left Board (11 GPIOs) ", padding=10)
+        left_box = ttk.LabelFrame(tab_gpio, text=" 👈 Left Birds & Outputs (esp32_Birds.ino / MCP23017) ", padding=10)
         left_box.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         left_box.columnconfigure((0, 1), weight=1)
 
@@ -1689,7 +1863,7 @@ class ESP32PulseWindow:
             btn.grid(row=r, column=c, padx=3, pady=3, sticky="nsew")
             self.buttons[(board, gpio)] = btn
 
-        right_box = ttk.LabelFrame(tab_gpio, text=" 👉 ESP32 Right Board (11 GPIOs) ", padding=10)
+        right_box = ttk.LabelFrame(tab_gpio, text=" 👉 Right Birds & Outputs (esp32_Birds.ino / MCP23017) ", padding=10)
         right_box.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
         right_box.columnconfigure((0, 1), weight=1)
 
@@ -1720,13 +1894,13 @@ class ESP32PulseWindow:
 
         # --- TAB 2: PCA9685 SERVO SLIDERS ---
         tab_servos = ttk.Frame(notebook, padding=10)
-        notebook.add(tab_servos, text=" ⚙️ PCA9685 Servo Control ")
+        notebook.add(tab_servos, text=" ⚙️ Birds PCA9685 Servos ")
 
         tab_servos.columnconfigure(0, weight=1)
         tab_servos.columnconfigure(1, weight=1)
 
         # Left ESP32 Servos Panel
-        servo_left_box = ttk.LabelFrame(tab_servos, text=" 👈 Left ESP32 PCA9685 Servos (8 Servos, Default 90°) ", padding=10)
+        servo_left_box = ttk.LabelFrame(tab_servos, text=" 👈 Left Birds PCA9685 Servos (Driver 1 - 0x40 / esp32_Birds.ino) ", padding=10)
         servo_left_box.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
 
         for idx, s in enumerate(SERVO_CONFIG.get("left", [])):
@@ -1765,7 +1939,7 @@ class ESP32PulseWindow:
             self.servo_labels[("left", chan)] = val_lbl
 
         # Right ESP32 Servos Panel
-        servo_right_box = ttk.LabelFrame(tab_servos, text=" 👉 Right ESP32 PCA9685 Servos (6 Servos, Default 90°) ", padding=10)
+        servo_right_box = ttk.LabelFrame(tab_servos, text=" 👉 Right Birds PCA9685 Servos (Driver 2 - 0x41 / esp32_Birds.ino) ", padding=10)
         servo_right_box.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
         for idx, s in enumerate(SERVO_CONFIG.get("right", [])):
@@ -1807,11 +1981,11 @@ class ESP32PulseWindow:
         tab_hexapod = ttk.Frame(notebook, padding=10)
         notebook.add(tab_hexapod, text=" 🤖 Hexapod Bot ")
 
-        # Bluetooth Header Frame inside Tab 3
-        hexapod_bt_frame = ttk.LabelFrame(tab_hexapod, text=" 📶 Hexapod ESP32 Bluetooth Connection (Broadcast Name: hexapod) ", padding=10)
+        # Bluetooth / Serial Header Frame inside Tab 3
+        hexapod_bt_frame = ttk.LabelFrame(tab_hexapod, text=" 📶 Hexapod ESP-32-Touch-LCD Connection (Bluetooth / USB-CDC Serial) ", padding=10)
         hexapod_bt_frame.pack(fill="x", padx=5, pady=(0, 8))
 
-        ttk.Label(hexapod_bt_frame, text="ESP32 Bluetooth Connection:").grid(row=0, column=0, sticky="w", padx=(0, 5))
+        ttk.Label(hexapod_bt_frame, text="ESP-32-Touch-LCD Connection:").grid(row=0, column=0, sticky="w", padx=(0, 5))
         self.hexapod_bt_combo = ttk.Combobox(hexapod_bt_frame, state="normal", width=35)
         self.hexapod_bt_combo.grid(row=0, column=1, sticky="w", padx=(0, 10))
 
@@ -1820,14 +1994,14 @@ class ESP32PulseWindow:
             self.hexapod_bt_device_map = bt_map
             self.hexapod_bt_combo['values'] = bt_opts
 
-            curr_dev = getattr(self.audio_loop, 'hexapod_bt_port', getattr(self.audio_loop, 'shobots_bt_port', 'hexapod'))
+            curr_dev = getattr(self.audio_loop, 'hexapod_bt_port', getattr(self.audio_loop, 'shobots_bt_port', 'hexapod-touch-lcd'))
             match = [lbl for lbl, dev in bt_map.items() if dev == curr_dev] if curr_dev else []
             if match:
                 self.hexapod_bt_combo.set(match[0])
             elif auto_bt in bt_opts:
                 self.hexapod_bt_combo.set(auto_bt)
             else:
-                self.hexapod_bt_combo.set("hexapod (Bluetooth Broadcast)")
+                self.hexapod_bt_combo.set("hexapod-touch-lcd (ESP-32-Touch-LCD BT/Serial)")
 
             if auto_conn:
                 on_connect_hexapod_bt()
@@ -1839,11 +2013,11 @@ class ESP32PulseWindow:
                 _, msg = self.audio_loop.hexapod.connect(dev)
                 self.audio_loop.hexapod_bt_port = dev
                 self.audio_loop.shobots_bt_port = dev
-                self.update_status(f"[Hexapod BT] {msg}")
+                self.update_status(f"[ESP-32-Touch-LCD] {msg}")
 
         bt_conn_btn = tk.Button(
             hexapod_bt_frame,
-            text="Connect Bluetooth",
+            text="Connect Device",
             font=("Segoe UI", 9, "bold"),
             bg="#10b981",
             fg="#ffffff",
@@ -1992,17 +2166,56 @@ class ESP32PulseWindow:
                     self.hexapod_sliders[(leg_code, joint)] = scale
                     self.hexapod_labels[(leg_code, joint)] = val_lbl
 
-        # --- TAB 4: TELLO DRONE CONTROL ---
+        # --- TAB 4: TELLO DRONE CONTROL (ESP32-S3 7" TOUCH LCD SCREEN BRIDGE) ---
         tab_drone = ttk.Frame(notebook, padding=10)
         notebook.add(tab_drone, text=" 🚁 Tello Drone ")
 
-        drone_top_box = ttk.LabelFrame(tab_drone, text=" 🎮 Tello Drone Direct Flight Controller ", padding=10)
-        drone_top_box.pack(fill="x", padx=5, pady=(0, 8))
+        # 1. ESP32-S3 7-Inch Touch LCD Connection Header
+        drone_conn_frame = ttk.LabelFrame(tab_drone, text=" 🖥️ ESP32-S3 7-Inch Touch LCD Screen Bridge & Animations ", padding=8)
+        drone_conn_frame.pack(fill="x", padx=5, pady=(0, 6))
+
+        t_port_str = getattr(self.audio_loop, 'esp32_tello_port', None) or 'Simulation Mode'
+        self.drone_status_lbl = ttk.Label(
+            drone_conn_frame,
+            text=f"ESP32-S3 7\" Touch LCD Status: {t_port_str}",
+            font=("Segoe UI", 9, "bold"),
+            foreground="#10b981" if getattr(self.audio_loop, 'esp32_tello_port', None) else "#38bdf8"
+        )
+        self.drone_status_lbl.pack(side="left", padx=5)
+
+        def on_reconnect_drone_tab():
+            on_connect_tello_port()
+
+        drone_tab_conn_btn = tk.Button(
+            drone_conn_frame,
+            text="🔌 Connect Tello Screen",
+            font=("Segoe UI", 9, "bold"),
+            bg="#059669",
+            fg="#ffffff",
+            activebackground="#047857",
+            activeforeground="#ffffff",
+            relief="flat",
+            cursor="hand2",
+            padx=8,
+            pady=2,
+            command=on_reconnect_drone_tab
+        )
+        drone_tab_conn_btn.pack(side="right", padx=5)
+
+        ttk.Label(
+            drone_conn_frame,
+            text="Commands from this PC window, Gemini AI, and the 7\" Touchscreen are animated on the LCD & sent to Tello over UDP.",
+            font=("Segoe UI", 8, "italic"),
+            foreground="#94a3b8"
+        ).pack(side="left", padx=10)
+
+        # 2. Flight Essentials & Mode Box
+        drone_top_box = ttk.LabelFrame(tab_drone, text=" 🎮 Flight Essentials & Control Mode ", padding=8)
+        drone_top_box.pack(fill="x", padx=5, pady=(0, 6))
 
         mode_btn_frame = ttk.Frame(drone_top_box)
-        mode_btn_frame.pack(fill="x", pady=4)
+        mode_btn_frame.pack(fill="x", pady=2)
 
-        # 1. Mode & Flight Essential Buttons
         cmd_mode_btn = tk.Button(
             mode_btn_frame,
             text="📡 Command Mode",
@@ -2017,7 +2230,7 @@ class ESP32PulseWindow:
             pady=4,
             command=lambda: self.send_drone_command("command")
         )
-        cmd_mode_btn.pack(side="left", padx=4)
+        cmd_mode_btn.pack(side="left", padx=3)
 
         takeoff_btn = tk.Button(
             mode_btn_frame,
@@ -2033,7 +2246,7 @@ class ESP32PulseWindow:
             pady=4,
             command=lambda: self.send_drone_command("takeoff")
         )
-        takeoff_btn.pack(side="left", padx=4)
+        takeoff_btn.pack(side="left", padx=3)
 
         land_btn = tk.Button(
             mode_btn_frame,
@@ -2049,7 +2262,7 @@ class ESP32PulseWindow:
             pady=4,
             command=lambda: self.send_drone_command("land")
         )
-        land_btn.pack(side="left", padx=4)
+        land_btn.pack(side="left", padx=3)
 
         emergency_btn = tk.Button(
             mode_btn_frame,
@@ -2065,137 +2278,201 @@ class ESP32PulseWindow:
             pady=4,
             command=lambda: self.send_drone_command("emergency")
         )
-        emergency_btn.pack(side="left", padx=4)
+        emergency_btn.pack(side="left", padx=3)
 
-        # 2. Directional Movement (Inches)
-        dir_box = ttk.LabelFrame(tab_drone, text=" 📐 Directional Flight Movement (Distances in Inches) ", padding=10)
-        dir_box.pack(fill="x", padx=5, pady=(0, 8))
+        bat_btn = tk.Button(
+            mode_btn_frame,
+            text="🔋 Battery?",
+            font=("Segoe UI", 9, "bold"),
+            bg="#334155",
+            fg="#38bdf8",
+            activebackground="#475569",
+            activeforeground="#ffffff",
+            relief="flat",
+            cursor="hand2",
+            padx=8,
+            pady=4,
+            command=lambda: self.send_drone_command("battery?")
+        )
+        bat_btn.pack(side="left", padx=3)
+
+        # 3. Directional Movement (Inches)
+        dir_box = ttk.LabelFrame(tab_drone, text=" 📐 Directional Flight Movement (Distances in Inches) ", padding=8)
+        dir_box.pack(fill="x", padx=5, pady=(0, 6))
         dir_box.columnconfigure((0, 1), weight=1)
 
         # Up
-        row_up = ttk.Frame(dir_box, padding=3)
-        row_up.grid(row=0, column=0, sticky="ew", padx=5, pady=3)
+        row_up = ttk.Frame(dir_box, padding=2)
+        row_up.grid(row=0, column=0, sticky="ew", padx=4, pady=2)
         up_btn = tk.Button(
             row_up, text="⬆️ Up", font=("Segoe UI", 9, "bold"), bg="#1e293b", fg="#38bdf8",
-            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=12,
+            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=10,
             command=lambda: self.on_drone_directional_move("up", self.up_entry.get())
         )
-        up_btn.pack(side="left", padx=(0, 6))
-        ttk.Label(row_up, text="Distance:").pack(side="left")
-        self.up_entry = ttk.Entry(row_up, width=6)
+        up_btn.pack(side="left", padx=(0, 4))
+        ttk.Label(row_up, text="Dist:").pack(side="left")
+        self.up_entry = ttk.Entry(row_up, width=5)
         self.up_entry.insert(0, "20")
-        self.up_entry.pack(side="left", padx=4)
-        ttk.Label(row_up, text="inches").pack(side="left")
+        self.up_entry.pack(side="left", padx=3)
+        ttk.Label(row_up, text="in").pack(side="left")
 
         # Down
-        row_down = ttk.Frame(dir_box, padding=3)
-        row_down.grid(row=0, column=1, sticky="ew", padx=5, pady=3)
+        row_down = ttk.Frame(dir_box, padding=2)
+        row_down.grid(row=0, column=1, sticky="ew", padx=4, pady=2)
         down_btn = tk.Button(
             row_down, text="⬇️ Down", font=("Segoe UI", 9, "bold"), bg="#1e293b", fg="#38bdf8",
-            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=12,
+            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=10,
             command=lambda: self.on_drone_directional_move("down", self.down_entry.get())
         )
-        down_btn.pack(side="left", padx=(0, 6))
-        ttk.Label(row_down, text="Distance:").pack(side="left")
-        self.down_entry = ttk.Entry(row_down, width=6)
+        down_btn.pack(side="left", padx=(0, 4))
+        ttk.Label(row_down, text="Dist:").pack(side="left")
+        self.down_entry = ttk.Entry(row_down, width=5)
         self.down_entry.insert(0, "20")
-        self.down_entry.pack(side="left", padx=4)
-        ttk.Label(row_down, text="inches").pack(side="left")
+        self.down_entry.pack(side="left", padx=3)
+        ttk.Label(row_down, text="in").pack(side="left")
 
         # Left
-        row_left = ttk.Frame(dir_box, padding=3)
-        row_left.grid(row=1, column=0, sticky="ew", padx=5, pady=3)
+        row_left = ttk.Frame(dir_box, padding=2)
+        row_left.grid(row=1, column=0, sticky="ew", padx=4, pady=2)
         left_btn = tk.Button(
             row_left, text="⬅️ Left", font=("Segoe UI", 9, "bold"), bg="#1e293b", fg="#38bdf8",
-            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=12,
+            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=10,
             command=lambda: self.on_drone_directional_move("left", self.left_entry.get())
         )
-        left_btn.pack(side="left", padx=(0, 6))
-        ttk.Label(row_left, text="Distance:").pack(side="left")
-        self.left_entry = ttk.Entry(row_left, width=6)
+        left_btn.pack(side="left", padx=(0, 4))
+        ttk.Label(row_left, text="Dist:").pack(side="left")
+        self.left_entry = ttk.Entry(row_left, width=5)
         self.left_entry.insert(0, "20")
-        self.left_entry.pack(side="left", padx=4)
-        ttk.Label(row_left, text="inches").pack(side="left")
+        self.left_entry.pack(side="left", padx=3)
+        ttk.Label(row_left, text="in").pack(side="left")
 
         # Right
-        row_right = ttk.Frame(dir_box, padding=3)
-        row_right.grid(row=1, column=1, sticky="ew", padx=5, pady=3)
+        row_right = ttk.Frame(dir_box, padding=2)
+        row_right.grid(row=1, column=1, sticky="ew", padx=4, pady=2)
         right_btn = tk.Button(
             row_right, text="➡️ Right", font=("Segoe UI", 9, "bold"), bg="#1e293b", fg="#38bdf8",
-            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=12,
+            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=10,
             command=lambda: self.on_drone_directional_move("right", self.right_entry.get())
         )
-        right_btn.pack(side="left", padx=(0, 6))
-        ttk.Label(row_right, text="Distance:").pack(side="left")
-        self.right_entry = ttk.Entry(row_right, width=6)
+        right_btn.pack(side="left", padx=(0, 4))
+        ttk.Label(row_right, text="Dist:").pack(side="left")
+        self.right_entry = ttk.Entry(row_right, width=5)
         self.right_entry.insert(0, "20")
-        self.right_entry.pack(side="left", padx=4)
-        ttk.Label(row_right, text="inches").pack(side="left")
+        self.right_entry.pack(side="left", padx=3)
+        ttk.Label(row_right, text="in").pack(side="left")
 
         # Forward
-        row_fwd = ttk.Frame(dir_box, padding=3)
-        row_fwd.grid(row=2, column=0, sticky="ew", padx=5, pady=3)
+        row_fwd = ttk.Frame(dir_box, padding=2)
+        row_fwd.grid(row=2, column=0, sticky="ew", padx=4, pady=2)
         fwd_btn = tk.Button(
             row_fwd, text="🔼 Forward", font=("Segoe UI", 9, "bold"), bg="#1e293b", fg="#38bdf8",
-            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=12,
+            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=10,
             command=lambda: self.on_drone_directional_move("forward", self.fwd_entry.get())
         )
-        fwd_btn.pack(side="left", padx=(0, 6))
-        ttk.Label(row_fwd, text="Distance:").pack(side="left")
-        self.fwd_entry = ttk.Entry(row_fwd, width=6)
+        fwd_btn.pack(side="left", padx=(0, 4))
+        ttk.Label(row_fwd, text="Dist:").pack(side="left")
+        self.fwd_entry = ttk.Entry(row_fwd, width=5)
         self.fwd_entry.insert(0, "20")
-        self.fwd_entry.pack(side="left", padx=4)
-        ttk.Label(row_fwd, text="inches").pack(side="left")
+        self.fwd_entry.pack(side="left", padx=3)
+        ttk.Label(row_fwd, text="in").pack(side="left")
 
         # Back
-        row_back = ttk.Frame(dir_box, padding=3)
-        row_back.grid(row=2, column=1, sticky="ew", padx=5, pady=3)
+        row_back = ttk.Frame(dir_box, padding=2)
+        row_back.grid(row=2, column=1, sticky="ew", padx=4, pady=2)
         back_btn = tk.Button(
             row_back, text="🔽 Back", font=("Segoe UI", 9, "bold"), bg="#1e293b", fg="#38bdf8",
-            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=12,
+            activebackground="#0284c7", activeforeground="#ffffff", relief="flat", cursor="hand2", width=10,
             command=lambda: self.on_drone_directional_move("back", self.back_entry.get())
         )
-        back_btn.pack(side="left", padx=(0, 6))
-        ttk.Label(row_back, text="Distance:").pack(side="left")
-        self.back_entry = ttk.Entry(row_back, width=6)
+        back_btn.pack(side="left", padx=(0, 4))
+        ttk.Label(row_back, text="Dist:").pack(side="left")
+        self.back_entry = ttk.Entry(row_back, width=5)
         self.back_entry.insert(0, "20")
-        self.back_entry.pack(side="left", padx=4)
-        ttk.Label(row_back, text="inches").pack(side="left")
+        self.back_entry.pack(side="left", padx=3)
+        ttk.Label(row_back, text="in").pack(side="left")
 
-        # 3. Rotation Control (Degrees)
-        rot_box = ttk.LabelFrame(tab_drone, text=" 🔄 Rotation Control (Degrees) ", padding=10)
-        rot_box.pack(fill="x", padx=5, pady=(0, 8))
+        # 4. Rotation Control (Degrees)
+        rot_box = ttk.LabelFrame(tab_drone, text=" 🔄 Yaw & Rotation Control (Degrees) ", padding=8)
+        rot_box.pack(fill="x", padx=5, pady=(0, 6))
         rot_box.columnconfigure((0, 1), weight=1)
 
         # Turn Left (ccw)
-        row_tl = ttk.Frame(rot_box, padding=3)
-        row_tl.grid(row=0, column=0, sticky="ew", padx=5, pady=3)
+        row_tl = ttk.Frame(rot_box, padding=2)
+        row_tl.grid(row=0, column=0, sticky="ew", padx=4, pady=2)
         tl_btn = tk.Button(
-            row_tl, text="↩️ Turn Left", font=("Segoe UI", 9, "bold"), bg="#1e293b", fg="#a855f7",
+            row_tl, text="↩️ Rotate CCW", font=("Segoe UI", 9, "bold"), bg="#1e293b", fg="#a855f7",
             activebackground="#7e22ce", activeforeground="#ffffff", relief="flat", cursor="hand2", width=12,
             command=lambda: self.on_drone_turn("ccw", self.turn_left_entry.get())
         )
-        tl_btn.pack(side="left", padx=(0, 6))
+        tl_btn.pack(side="left", padx=(0, 4))
         ttk.Label(row_tl, text="Angle:").pack(side="left")
-        self.turn_left_entry = ttk.Entry(row_tl, width=6)
+        self.turn_left_entry = ttk.Entry(row_tl, width=5)
         self.turn_left_entry.insert(0, "90")
-        self.turn_left_entry.pack(side="left", padx=4)
-        ttk.Label(row_tl, text="degrees").pack(side="left")
+        self.turn_left_entry.pack(side="left", padx=3)
+        ttk.Label(row_tl, text="deg").pack(side="left")
 
         # Turn Right (cw)
-        row_tr = ttk.Frame(rot_box, padding=3)
-        row_tr.grid(row=0, column=1, sticky="ew", padx=5, pady=3)
+        row_tr = ttk.Frame(rot_box, padding=2)
+        row_tr.grid(row=0, column=1, sticky="ew", padx=4, pady=2)
         tr_btn = tk.Button(
-            row_tr, text="↪️ Turn Right", font=("Segoe UI", 9, "bold"), bg="#1e293b", fg="#a855f7",
+            row_tr, text="↪️ Rotate CW", font=("Segoe UI", 9, "bold"), bg="#1e293b", fg="#a855f7",
             activebackground="#7e22ce", activeforeground="#ffffff", relief="flat", cursor="hand2", width=12,
             command=lambda: self.on_drone_turn("cw", self.turn_right_entry.get())
         )
-        tr_btn.pack(side="left", padx=(0, 6))
+        tr_btn.pack(side="left", padx=(0, 4))
         ttk.Label(row_tr, text="Angle:").pack(side="left")
-        self.turn_right_entry = ttk.Entry(row_tr, width=6)
+        self.turn_right_entry = ttk.Entry(row_tr, width=5)
         self.turn_right_entry.insert(0, "90")
-        self.turn_right_entry.pack(side="left", padx=4)
-        ttk.Label(row_tr, text="degrees").pack(side="left")
+        self.turn_right_entry.pack(side="left", padx=3)
+        ttk.Label(row_tr, text="deg").pack(side="left")
+
+        # 5. Acrobatic Stunts & Choreography Routines Bar
+        stunt_box = ttk.LabelFrame(tab_drone, text=" 🎪 Acrobatic 360° Flips & Autonomous Choreography ", padding=8)
+        stunt_box.pack(fill="x", padx=5, pady=(0, 6))
+
+        stunt_btn_frame = ttk.Frame(stunt_box)
+        stunt_btn_frame.pack(fill="x", pady=2)
+
+        flips = [
+            ("🔄 Flip Fwd", "f", "#7c3aed"),
+            ("🔄 Flip Back", "b", "#7c3aed"),
+            ("↺ Flip Left", "l", "#7c3aed"),
+            ("↻ Flip Right", "r", "#7c3aed"),
+        ]
+        for f_label, f_dir, f_color in flips:
+            f_btn = tk.Button(
+                stunt_btn_frame,
+                text=f_label,
+                font=("Segoe UI", 9, "bold"),
+                bg=f_color,
+                fg="#ffffff",
+                relief="flat",
+                cursor="hand2",
+                padx=8,
+                pady=3,
+                command=lambda d=f_dir: self.on_drone_flip(d)
+            )
+            f_btn.pack(side="left", padx=3)
+
+        routines = [
+            ("🔲 Square Box", "square", "#0284c7"),
+            ("🌀 360 Scan", "scan360", "#059669"),
+            ("🎈 Bounce Wave", "bounce", "#d97706"),
+        ]
+        for r_label, r_code, r_color in routines:
+            r_btn = tk.Button(
+                stunt_btn_frame,
+                text=r_label,
+                font=("Segoe UI", 9, "bold"),
+                bg=r_color,
+                fg="#ffffff",
+                relief="flat",
+                cursor="hand2",
+                padx=8,
+                pady=3,
+                command=lambda rc=r_code: self.on_drone_routine(rc)
+            )
+            r_btn.pack(side="left", padx=3)
 
         # Tab 5: 6-DOF Robot Arm
         tab_arm = ttk.Frame(notebook, padding=10)
@@ -2473,6 +2750,14 @@ class ESP32PulseWindow:
         except ValueError:
             self.update_status(f"Invalid angle '{degrees_str}'. Please enter degrees (1-360).")
 
+    def on_drone_flip(self, direction: str):
+        cmd = f"flip {direction}"
+        self.send_drone_command(cmd)
+
+    def on_drone_routine(self, routine_name: str):
+        cmd = f"ROUTINE:{routine_name.upper()}"
+        self.send_drone_command(cmd)
+
     def on_servo_slider_moved(self, board, channel, name, value, label_widget):
         try:
             deg = int(float(value))
@@ -2535,7 +2820,7 @@ class ESP32PulseWindow:
 
 
 class AudioLoop:
-    def __init__(self, video_mode=DEFAULT_MODE, camera_idx=0, mic_idx=None, speaker_idx=None, voice_name="Zephyr", esp32_port=None, esp32_left_port=None, esp32_right_port=None, esp32_arm_port=None, hexapod_bt_port="hexapod", shobots_bt_port=None, tello_ip="192.168.10.1", tello_port=8889):
+    def __init__(self, video_mode=DEFAULT_MODE, camera_idx=0, mic_idx=None, speaker_idx=None, voice_name="Zephyr", esp32_port=None, esp32_left_port=None, esp32_right_port=None, esp32_arm_port=None, esp32_tello_port=None, hexapod_bt_port="hexapod", shobots_bt_port=None, tello_ip="192.168.10.1", tello_port=8889):
         self.video_mode = video_mode
         self.camera_idx = camera_idx
         self.mic_idx = mic_idx
@@ -2544,6 +2829,7 @@ class AudioLoop:
         self.esp32_left_port = esp32_left_port or esp32_port
         self.esp32_right_port = esp32_right_port
         self.esp32_arm_port = esp32_arm_port
+        self.esp32_tello_port = esp32_tello_port
         self.esp32_port = self.esp32_left_port
         self.hexapod_bt_port = hexapod_bt_port or shobots_bt_port or "hexapod"
         self.hexapod = HexapodController(bt_port=self.hexapod_bt_port)
@@ -2553,8 +2839,9 @@ class AudioLoop:
         self.serial_left = None
         self.serial_right = None
         self.serial_arm = None
+        self.serial_tello = None
         self.serial_conn = None
-        self.tello = TelloController(ip=tello_ip, port=tello_port)
+        self.tello = TelloController(ip=tello_ip, port=tello_port, audio_loop=self)
         self.leviton = LevitonController()
         self.ewelink = EwelinkController()
 
@@ -2600,7 +2887,16 @@ class AudioLoop:
                         pass
                 self.serial_arm = None
                 self.esp32_arm_port = None
-            return True, f"ESP32 {board.title()} set to Simulation Mode"
+            elif board in ("tello", "drone", "telloscreen"):
+                if self.serial_tello and self.serial_tello.is_open:
+                    try:
+                        self.serial_tello.close()
+                    except Exception:
+                        pass
+                self.serial_tello = None
+                self.esp32_tello_port = None
+            board_desc = f"Birds Controller ({board.title()})" if board in ("left", "right") else f"ESP32 {board.title()}"
+            return True, f"{board_desc} set to Simulation Mode"
 
         try:
             conn = serial.Serial()
@@ -2611,7 +2907,7 @@ class AudioLoop:
             conn.rts = False
             conn.open()
 
-            if board == "left":
+            if board in ("left", "birds", "led", "unified"):
                 if self.serial_left and self.serial_left.is_open:
                     try:
                         self.serial_left.close()
@@ -2621,8 +2917,12 @@ class AudioLoop:
                 self.esp32_left_port = port_name
                 self.esp32_port = port_name
                 self.serial_conn = conn
+                if not self.serial_right or not self.serial_right.is_open:
+                    self.serial_right = conn
+                    self.esp32_right_port = port_name
+                return True, f"Connected Birds Controller (Left / esp32_Birds.ino) on {port_name}"
             elif board == "right":
-                if self.serial_right and self.serial_right.is_open:
+                if self.serial_right and self.serial_right.is_open and self.serial_right != self.serial_left:
                     try:
                         self.serial_right.close()
                     except Exception:
@@ -2631,6 +2931,7 @@ class AudioLoop:
                 self.esp32_right_port = port_name
                 if not self.serial_conn or not self.serial_conn.is_open:
                     self.serial_conn = conn
+                return True, f"Connected Birds Controller (Right / esp32_Birds.ino) on {port_name}"
             elif board == "arm":
                 if self.serial_arm and self.serial_arm.is_open:
                     try:
@@ -2641,29 +2942,42 @@ class AudioLoop:
                 self.esp32_arm_port = port_name
                 if not self.serial_conn or not self.serial_conn.is_open:
                     self.serial_conn = conn
-            return True, f"Connected ESP32 {board.title()} on {port_name}"
+                return True, f"Connected ESP32 Arm (esp32_arm.ino) on {port_name}"
+            elif board in ("tello", "drone", "telloscreen"):
+                if self.serial_tello and self.serial_tello.is_open:
+                    try:
+                        self.serial_tello.close()
+                    except Exception:
+                        pass
+                self.serial_tello = conn
+                self.esp32_tello_port = port_name
+                return True, f"Connected ESP32-S3 7\" Touch LCD Tello Screen (esp32_tello.ino) on {port_name}"
+            return True, f"Connected {board.title()} on {port_name}"
         except Exception as e:
-            return False, f"Failed ESP32 {board.title()} ({port_name}): {e}"
+            return False, f"Failed {board.title()} ({port_name}): {e}"
 
     def trigger_esp32_gpio(self, board: str, gpio: int, function_name: str, state: bool = None) -> dict:
         board = board.lower()
         if board == "arm":
             conn = self.serial_arm
+            prefix = ""
         elif board == "left":
             conn = self.serial_left
+            prefix = "L:"
         else:
-            conn = self.serial_right
+            conn = self.serial_right or self.serial_left
+            prefix = "R:"
         if not conn or not conn.is_open:
             conn = self.serial_conn
 
         if state is True or state == 1 or state == "1":
-            cmd_str = f"{gpio}:1\r\n"
+            cmd_str = f"{prefix}{gpio}:1\r\n"
         elif state is False or state == 0 or state == "0":
-            cmd_str = f"{gpio}:0\r\n"
+            cmd_str = f"{prefix}{gpio}:0\r\n"
         elif state == "PULSE" or state == "pulse":
-            cmd_str = f"{gpio}:PULSE\r\n"
+            cmd_str = f"{prefix}{gpio}:PULSE\r\n"
         else:
-            cmd_str = f"{gpio}\r\n"
+            cmd_str = f"{prefix}{gpio}\r\n"
 
         if conn and conn.is_open:
             try:
@@ -2688,7 +3002,6 @@ class AudioLoop:
         return self.trigger_esp32_gpio("left", 2, "Builtin LED ON" if state else "Builtin LED OFF")
 
     def pulse_led(self, count: int = 1, gpio: int = None, duration_ms: int = 500) -> dict:
-        import time
         target_gpio = gpio if gpio is not None else 2
         for _ in range(count):
             self.trigger_esp32_gpio("left", target_gpio, f"Pulse GPIO {target_gpio}", state="PULSE")
@@ -2696,6 +3009,33 @@ class AudioLoop:
 
     async def pulse_led_async(self, count: int = 1, gpio: int = None, duration_ms: int = 500) -> dict:
         return await asyncio.to_thread(self.pulse_led, count, gpio, duration_ms)
+
+    def execute_bird_routine(self, routine: str) -> dict:
+        routine = routine.lower().strip()
+        cmd_str = f"ROUTINE:{routine}\r\n"
+        conn = self.serial_left or self.serial_conn
+        if conn and conn.is_open:
+            try:
+                conn.write(cmd_str.encode("utf-8"))
+                conn.flush()
+                msg = f"Triggered routine '{routine.upper()}' on Waveshare 7-inch Touch-LCD ESP32"
+                print(f"\n[ESP32-TOUCH-7] {msg}")
+                if hasattr(self, 'gui_window') and self.gui_window and hasattr(self.gui_window, 'update_status'):
+                    self.gui_window.update_status(f"Routine: {routine.upper()}")
+                return {"status": "success", "routine": routine, "message": msg}
+            except Exception as e:
+                err_msg = f"Error sending routine '{routine}': {e}"
+                print(f"\n[ESP32-TOUCH-7] {err_msg}")
+                return {"status": "error", "message": err_msg}
+        else:
+            sim_msg = f"[Simulated Waveshare 7\" Touch-LCD] Triggered routine '{routine.upper()}'"
+            print(f"\n{sim_msg}")
+            if hasattr(self, 'gui_window') and self.gui_window and hasattr(self.gui_window, 'update_status'):
+                self.gui_window.update_status(f"Simulated Routine: {routine.upper()}")
+            return {"status": "success", "routine": routine, "simulated": True, "message": sim_msg}
+
+    async def execute_bird_routine_async(self, routine: str) -> dict:
+        return await asyncio.to_thread(self.execute_bird_routine, routine)
 
     async def send_tello_command(self, command: str) -> dict:
         return await asyncio.to_thread(self.tello.send_cmd, command)
@@ -2707,12 +3047,16 @@ class AudioLoop:
         board = board.lower() if board else "left"
         if board == "arm":
             conn = self.serial_arm
+            cmd_str = f"SERVO:{channel}:{angle}\r\n"
         elif board == "left":
             conn = self.serial_left
+            cmd_str = f"SERVO:L:{channel}:{angle}\r\n"
         elif board == "right":
-            conn = self.serial_right
+            conn = self.serial_right or self.serial_left
+            cmd_str = f"SERVO:R:{channel}:{angle}\r\n"
         else:
             conn = self.serial_left
+            cmd_str = f"SERVO:L:{channel}:{angle}\r\n"
 
         if not conn or not conn.is_open:
             conn = self.serial_conn
@@ -2727,7 +3071,6 @@ class AudioLoop:
             channel = 0
 
         angle = max(0, min(180, int(angle)))
-        cmd_str = f"SERVO:{channel}:{angle}\r\n"
 
         if conn and conn.is_open:
             try:
@@ -3003,15 +3346,21 @@ class AudioLoop:
                                 y = fc.args.get("y")
                                 z = fc.args.get("z")
                                 duration = fc.args.get("duration", 200)
+                                lcd_msg = fc.args.get("lcd_message")
+
+                                if lcd_msg:
+                                    await asyncio.to_thread(self.hexapod.set_lcd_message, lcd_msg)
 
                                 if action == "set_ik" or (leg_name and x is not None and y is not None and z is not None):
                                     result = await asyncio.to_thread(self.hexapod.move_leg_ik, leg_name, x, y, z, duration)
                                 elif action == "set_joint" or (leg_name and joint_name and angle is not None):
                                     result = await asyncio.to_thread(self.hexapod.set_joint_angle, leg_name, joint_name, angle)
+                                elif action == "set_lcd_message" and lcd_msg:
+                                    result = {"status": "success", "action": "set_lcd_message", "message": f"Displayed '{lcd_msg}' on ESP-32-Touch-LCD"}
                                 elif action:
                                     result = await asyncio.to_thread(self.hexapod.execute_action, action)
                                 else:
-                                    result = {"status": "error", "message": "Specify action, set_joint (leg+joint+angle), or set_ik (leg+x+y+z)"}
+                                    result = {"status": "error", "message": "Specify action, set_joint (leg+joint+angle), set_ik (leg+x+y+z), or set_lcd_message"}
 
                                 function_responses.append(
                                     types.FunctionResponse(
@@ -3041,6 +3390,16 @@ class AudioLoop:
                                 else:
                                     result = {"status": "error", "message": "Specify action, channel+angle, or x+y+z IK coordinates"}
 
+                                function_responses.append(
+                                    types.FunctionResponse(
+                                        name=fc.name,
+                                        response=result,
+                                        id=fc.id
+                                    )
+                                )
+                            elif fc.name == "trigger_bird_routine":
+                                routine = fc.args.get("routine", "home")
+                                result = await self.execute_bird_routine_async(routine)
                                 function_responses.append(
                                     types.FunctionResponse(
                                         name=fc.name,
@@ -3246,17 +3605,17 @@ def choose_esp32_port():
         import serial.tools.list_ports
         ports = list(serial.tools.list_ports.comports())
     except ImportError:
-        print("pyserial is not installed or not available. Skipping ESP32 port selection.")
+        print("pyserial is not installed or not available. Skipping Birds / ESP32 port selection.")
         return None
 
-    print("\nAvailable serial ports for ESP32 dev module:")
-    print("[N] None (Skip ESP32 connection)")
+    print("\nAvailable serial ports for Birds / Waveshare 7-inch Touch LCD Controller (esp32_Birds.ino):")
+    print("[N] None (Skip Birds connection)")
     for idx, p in enumerate(ports):
         print(f"[{idx}] {p.device} - {p.description}")
     
     while True:
         try:
-            choice = input("Select ESP32 port by index [default: None]: ").strip()
+            choice = input("Select Birds / ESP32 port by index [default: None]: ").strip()
             if not choice or choice.upper() == 'N':
                 return None
             choice_idx = int(choice)
@@ -3573,32 +3932,38 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
         voice_combo.current(0)
 
     # 5. COM/Serial ports (Auto-Detected)
-    port_options, port_device_map, auto_left_lbl, auto_right_lbl, auto_arm_lbl = scan_and_autodetect_esp32_ports()
+    port_options, port_device_map, auto_left_lbl, auto_right_lbl, auto_arm_lbl, auto_tello_lbl = scan_and_autodetect_esp32_ports()
 
-    # ESP32 Left COM Port Selector
-    ttk.Label(main_frame, text="ESP32 Left COM Port:").grid(row=6, column=0, sticky=tk.W, pady=6)
+    # Birds Left COM Port Selector
+    ttk.Label(main_frame, text="Birds Left COM Port (esp32_Birds.ino):").grid(row=6, column=0, sticky=tk.W, pady=6)
     left_port_combo = ttk.Combobox(main_frame, values=port_options, state="readonly", width=42)
     left_port_combo.grid(row=6, column=1, sticky=tk.W, pady=6)
     left_port_combo.set(auto_left_lbl)
 
-    # ESP32 Right COM Port Selector
-    ttk.Label(main_frame, text="ESP32 Right COM Port:").grid(row=7, column=0, sticky=tk.W, pady=6)
+    # Birds Right COM Port Selector
+    ttk.Label(main_frame, text="Birds Right COM Port (esp32_Birds.ino):").grid(row=7, column=0, sticky=tk.W, pady=6)
     right_port_combo = ttk.Combobox(main_frame, values=port_options, state="readonly", width=42)
     right_port_combo.grid(row=7, column=1, sticky=tk.W, pady=6)
     right_port_combo.set(auto_right_lbl)
 
     # ESP32 Arm COM Port Selector
-    ttk.Label(main_frame, text="ESP32 Arm COM Port:").grid(row=8, column=0, sticky=tk.W, pady=6)
+    ttk.Label(main_frame, text="ESP32 Arm COM Port (esp32_arm.ino):").grid(row=8, column=0, sticky=tk.W, pady=6)
     arm_port_combo = ttk.Combobox(main_frame, values=port_options, state="readonly", width=42)
     arm_port_combo.grid(row=8, column=1, sticky=tk.W, pady=6)
     arm_port_combo.set(auto_arm_lbl)
 
+    # ESP32 Tello Screen COM Port Selector
+    ttk.Label(main_frame, text="Tello Screen COM (esp32_tello.ino):").grid(row=9, column=0, sticky=tk.W, pady=6)
+    tello_port_combo = ttk.Combobox(main_frame, values=port_options, state="readonly", width=42)
+    tello_port_combo.grid(row=9, column=1, sticky=tk.W, pady=6)
+    tello_port_combo.set(auto_tello_lbl)
+
     # 5b. ESP32 Bluetooth Hexapod Connection Selector
     bt_options, bt_dev_map, auto_bt_lbl = scan_bluetooth_ports()
-    ttk.Label(main_frame, text="Hexapod Bluetooth ESP32:").grid(row=9, column=0, sticky=tk.W, pady=6)
+    ttk.Label(main_frame, text="Hexapod Bluetooth ESP32:").grid(row=10, column=0, sticky=tk.W, pady=6)
     
     hexapod_bt_frame = ttk.Frame(main_frame)
-    hexapod_bt_frame.grid(row=9, column=1, sticky=tk.W, pady=6)
+    hexapod_bt_frame.grid(row=10, column=1, sticky=tk.W, pady=6)
     
     hexapod_bt_combo = ttk.Combobox(hexapod_bt_frame, values=bt_options, state="normal", width=25)
     hexapod_bt_combo.pack(side=tk.LEFT, padx=(0, 5))
@@ -3624,19 +3989,19 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
     scan_bt_btn.pack(side=tk.LEFT)
 
     # Tello Drone IP Entry
-    ttk.Label(main_frame, text="Tello Drone IP:").grid(row=10, column=0, sticky=tk.W, pady=8)
+    ttk.Label(main_frame, text="Tello Drone IP:").grid(row=11, column=0, sticky=tk.W, pady=8)
     
     tello_ip_frame = ttk.Frame(main_frame)
-    tello_ip_frame.grid(row=10, column=1, sticky=tk.W, pady=8)
+    tello_ip_frame.grid(row=11, column=1, sticky=tk.W, pady=8)
     
     tello_ip_combo = ttk.Combobox(tello_ip_frame, width=28, state="normal")
     tello_ip_combo.pack(side=tk.LEFT, padx=(0, 5))
     tello_ip_combo.set("192.168.10.1")
     
     # Tello Drone Port Entry
-    ttk.Label(main_frame, text="Tello Drone Port:").grid(row=11, column=0, sticky=tk.W, pady=8)
+    ttk.Label(main_frame, text="Tello Drone Port:").grid(row=12, column=0, sticky=tk.W, pady=8)
     tello_port_entry = ttk.Entry(main_frame, width=45)
-    tello_port_entry.grid(row=11, column=1, sticky=tk.W, pady=8)
+    tello_port_entry.grid(row=12, column=1, sticky=tk.W, pady=8)
     tello_port_entry.insert(0, "8889")
     
     def on_scan_network():
@@ -3852,6 +4217,9 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
         sel_arm_lbl = arm_port_combo.get()
         result["esp32_arm_port"] = port_device_map.get(sel_arm_lbl)
 
+        sel_tello_lbl = tello_port_combo.get()
+        result["esp32_tello_port"] = port_device_map.get(sel_tello_lbl)
+
         result["esp32_port"] = result["esp32_left_port"]
 
         sel_bt_lbl = hexapod_bt_combo.get()
@@ -3947,6 +4315,8 @@ if __name__ == "__main__":
         voice_name = choose_voice()
         esp32_left_port = choose_esp32_port()
         esp32_right_port = choose_esp32_port()
+        esp32_arm_port = None
+        esp32_tello_port = None
         hexapod_bt_port = choose_hexapod_bt_port()
         tello_port = choose_tello_port()
         tello_ip = choose_tello_ip(tello_port)
@@ -3958,6 +4328,8 @@ if __name__ == "__main__":
         voice_name = settings["voice_name"]
         esp32_left_port = settings.get("esp32_left_port")
         esp32_right_port = settings.get("esp32_right_port")
+        esp32_arm_port = settings.get("esp32_arm_port")
+        esp32_tello_port = settings.get("esp32_tello_port")
         hexapod_bt_port = settings.get("hexapod_bt_port", settings.get("shobots_bt_port", "hexapod"))
         tello_ip = settings.get("tello_ip", "192.168.10.1")
         tello_port = settings.get("tello_port", 8889)
@@ -3971,6 +4343,8 @@ if __name__ == "__main__":
         voice_name=voice_name,
         esp32_left_port=esp32_left_port,
         esp32_right_port=esp32_right_port,
+        esp32_arm_port=esp32_arm_port,
+        esp32_tello_port=esp32_tello_port,
         hexapod_bt_port=hexapod_bt_port,
         tello_ip=tello_ip,
         tello_port=tello_port

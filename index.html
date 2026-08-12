@@ -396,13 +396,41 @@
         </div>
 
         <!-- Quick Direct Actions -->
-        <div class="led-quick-actions" style="margin-top: 0.5rem;">
+        <div class="led-quick-actions" style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
           <button type="button" id="modal-led-on-btn" class="text-btn btn-small action-on">
             <i class="fa-solid fa-power-off"></i> Turn ON
           </button>
           <button type="button" id="modal-led-off-btn" class="text-btn btn-small action-off">
             <i class="fa-solid fa-circle-xmark"></i> Turn OFF
           </button>
+        </div>
+
+        <!-- Waveshare 7-inch Touch-LCD Routines -->
+        <div class="routine-section" style="margin-top: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 0.75rem;">
+          <div class="section-title-bar" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <i class="fa-solid fa-masks-theater" style="color: #c084fc;"></i>
+            <h4 style="font-size: 0.85rem; font-weight: 600; color: #f8fafc; margin: 0;">Waveshare 7" Touch-LCD Choreography & Light Routines</h4>
+          </div>
+          <div class="routine-buttons-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem;">
+            <button type="button" class="bird-routine-btn text-btn btn-small" data-routine="sing" style="background: rgba(2, 132, 199, 0.25); border: 1px solid #0284c7; color: #38bdf8;">
+              <i class="fa-solid fa-feather-pointed"></i> 🦜 Sing & Chirp
+            </button>
+            <button type="button" class="bird-routine-btn text-btn btn-small" data-routine="sweep" style="background: rgba(5, 150, 105, 0.25); border: 1px solid #059669; color: #34d399;">
+              <i class="fa-solid fa-lightbulb"></i> 💡 Spotlight Sweep
+            </button>
+            <button type="button" class="bird-routine-btn text-btn btn-small" data-routine="dance" style="background: rgba(217, 119, 6, 0.25); border: 1px solid #d97706; color: #fbbf24;">
+              <i class="fa-solid fa-arrows-rotate"></i> 🔄 Turntable Dance
+            </button>
+            <button type="button" class="bird-routine-btn text-btn btn-small" data-routine="lightshow" style="background: rgba(124, 58, 237, 0.25); border: 1px solid #7c3aed; color: #c084fc;">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> 🌟 Light Show
+            </button>
+            <button type="button" class="bird-routine-btn text-btn btn-small" data-routine="sing" style="background: rgba(219, 39, 119, 0.25); border: 1px solid #db2777; color: #f472b6;">
+              <i class="fa-solid fa-music"></i> 🎶 Bird Symphony
+            </button>
+            <button type="button" class="bird-routine-btn text-btn btn-small" data-routine="home" style="background: rgba(71, 85, 105, 0.25); border: 1px solid #64748b; color: #cbd5e1;">
+              <i class="fa-solid fa-house"></i> 🏠 All Home (90°)
+            </button>
+          </div>
         </div>
 
         <!-- PCA9685 Servo Motors Control Section (Default 90°) -->

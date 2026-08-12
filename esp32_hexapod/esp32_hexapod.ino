@@ -1,63 +1,126 @@
 /*
-  Hexapod Controller - ESP32 Hexapod Firmware
+  Hexapod Controller - ESP-32-Touch-LCD Firmware (7-Inch Capacitive Touchscreen Edition)
+  =============================================================================
+  Hardware: ESP32-S3-Touch-LCD-7 (7.0" 800x480 Capacitive Touchscreen, GT911 Controller)
+            Also supports 1.28", 2.8", 3.5", 4.3" and Generic ESP32 Touch LCDs.
+  Substituted for: ESP-32 DevKit
+
   Features:
-    - Bluetooth Classic Serial Interface (Broadcast Name: "hexapod")
-    - Dual PCA9685 16-Channel I2C Servo Driver Control:
-        * Driver 1 (I2C 0x40): Left Legs (FL, ML, RL)
-        * Driver 2 (I2C 0x41): Right Legs (FR, MR, RR)
+    - 7.0-inch 800x480 Widescreen Capacitive Touchscreen Dashboard
+    - GT911 High-Precision 5-Point Capacitive Multi-Touch Interface
+    - Interactive Touch Buttons:
+        [STAND], [SIT], [FLAT], [WALK], [RUN], [DANCE], [BOW], [WAVE L], [WAVE R], [TURN L], [TURN R], [STOP], [SPEED +/-]
+    - Widescreen Robot Telemetry & Live Animated Robot Mascot / Expressions
     - 3-DOF Inverse Kinematics (IK) Solver for (X, Y, Z) Cartesian Foot Positioning
-    - Coordinated Speed & Trajectory Interpolation Engine (50Hz S-Curve Interpolation)
+    - Dual PCA9685 16-Channel I2C Servo Driver Control (18 Servos Total):
+        * Driver 1 (I2C 0x40): Left Legs  (FL, ML, RL) - 9 Servos
+        * Driver 2 (I2C 0x41): Right Legs (FR, MR, RR) - 9 Servos
+    - 50Hz Smooth S-Curve Trajectory & Motion Interpolation Engine
+    - Multi-Channel Control: USB CDC Serial, Bluetooth / BLE, and Direct Touch Screen
 
-  Pinout:
-    - I2C SDA : GPIO 21
-    - I2C SCL : GPIO 22
-    - Serial Baud : 115200 (USB & Bluetooth)
-
-  Channel Mapping per Driver:
-    Driver 1 (0x40 - Left):
-      FL (Front Left)  : Coxa=0, Femur=1, Tibia=2
-      ML (Middle Left) : Coxa=3, Femur=4, Tibia=5
-      RL (Rear Left)   : Coxa=6, Femur=7, Tibia=8
-    Driver 2 (0x41 - Right):
-      FR (Front Right) : Coxa=0, Femur=1, Tibia=2
-      MR (Middle Right): Coxa=3, Femur=4, Tibia=5
-      RR (Rear Right)  : Coxa=6, Femur=7, Tibia=8
-
-  Command Protocol (Serial / Bluetooth):
-    - "HEX:SERVO:<driver>:<chan>:<deg>"  -> Sets joint angle directly (0-180)
-    - "HEX:IK:<leg>:<X>:<Y>:<Z>:<ms>"    -> Sets Cartesian foot position using IK
-    - "HEX:SPEED:<ms>"                   -> Sets global trajectory duration (default 200ms)
-    - "HEX:stand"                        -> Stand posture
-    - "HEX:sit"                          -> Sit posture
-    - "HEX:flat"                         -> Flat posture
-    - "HEX:walk"                         -> Tripod walk gait
-    - "HEX:run"                          -> Fast tripod gait
-    - "HEX:dance"                        -> Dance routine
-    - "HEX:bow"                          -> Bow routine
-    - "HEX:wave_left" / "HEX:wave_right" -> Wave arm routine
-    - "HEX:turn_left" / "HEX:turn_right" -> Rotate in place
-    - "HEX:stop"                         -> Stop current motion / return to stand
+  Pinout & Hardware Configuration (Waveshare ESP32-S3-Touch-LCD-7):
+    - I2C Bus (Shared for GT911 Touch Controller & PCA9685 Servo Drivers):
+        * SDA : GPIO 8
+        * SCL : GPIO 9
+        * TP_INT: GPIO 4
+        * TP_RST: Controlled via onboard IO Expander (or direct GPIO)
+        * GT911 I2C Address: 0x5D (or 0x14)
+    - RGB Display Interface (800x480 ST7262 / 16-bit RGB565)
+  =============================================================================
 */
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <BluetoothSerial.h>
+#include <SPI.h>
 #include <math.h>
 
-// Bluetooth Serial Instance
+#if defined(CONFIG_BT_ENABLED) && !defined(CONFIG_IDF_TARGET_ESP32S3)
+#include <BluetoothSerial.h>
+#define HAS_BT_CLASSIC 1
 BluetoothSerial SerialBT;
+#else
+#define HAS_BT_CLASSIC 0
+#endif
 
-// PCA9685 Definitions
-#define PCA9685_ADDR_LEFT  0x40 // Driver 1 (Left Legs FL, ML, RL)
-#define PCA9685_ADDR_RIGHT 0x41 // Driver 2 (Right Legs FR, MR, RR)
+// =============================================================================
+// Hardware Profile Selection
+// =============================================================================
+// Select ONE board profile below:
+#define BOARD_ESP32_TOUCH_LCD_7    1  // Waveshare ESP32-S3-Touch-LCD-7 (7.0" 800x480 GT911 Capacitive Touch)
+//#define BOARD_ESP32_TOUCH_LCD_128 1  // Waveshare ESP32-S3-Touch-LCD-1.28 (1.28" Round 240x240 GC9A01 + CST816S)
+//#define BOARD_ESP32_TOUCH_LCD_28  1  // Waveshare / Sunton ESP32-Touch-LCD-2.8 / 3.5 (240x320 ST7789)
+//#define BOARD_ESP32_TOUCH_LCD_GENERIC 1 // Generic ESP32 with external Touch LCD
 
-#define MODE1        0x00
-#define PRESCALE     0xFE
-#define LED0_ON_L    0x06
+// Pin & Resolution Definitions
+#if defined(BOARD_ESP32_TOUCH_LCD_7)
+  #define I2C_SDA_PIN      8
+  #define I2C_SCL_PIN      9
+  #define TP_INT_PIN       4
+  #define TP_RST_PIN      -1
+  #define SCREEN_WIDTH   800
+  #define SCREEN_HEIGHT  480
+  #define TOUCH_I2C_ADDR 0x5D // GT911 Capacitive Touch Controller
+  #define IS_GT911_TOUCH   1
+#elif defined(BOARD_ESP32_TOUCH_LCD_128)
+  #define I2C_SDA_PIN      6
+  #define I2C_SCL_PIN      7
+  #define LCD_DC_PIN       8
+  #define LCD_CS_PIN       9
+  #define LCD_CLK_PIN     10
+  #define LCD_MOSI_PIN    11
+  #define LCD_RST_PIN     12
+  #define LCD_BL_PIN      40
+  #define TP_INT_PIN       5
+  #define TP_RST_PIN      13
+  #define SCREEN_WIDTH   240
+  #define SCREEN_HEIGHT  240
+  #define TOUCH_I2C_ADDR 0x15 // CST816S Capacitive Touch
+  #define IS_GT911_TOUCH   0
+#elif defined(BOARD_ESP32_TOUCH_LCD_28)
+  #define I2C_SDA_PIN      4
+  #define I2C_SCL_PIN      5
+  #define LCD_DC_PIN       2
+  #define LCD_CS_PIN      15
+  #define LCD_CLK_PIN     14
+  #define LCD_MOSI_PIN    13
+  #define LCD_RST_PIN     -1
+  #define LCD_BL_PIN      21
+  #define TP_INT_PIN      -1
+  #define TP_RST_PIN      -1
+  #define SCREEN_WIDTH   240
+  #define SCREEN_HEIGHT  320
+  #define TOUCH_I2C_ADDR 0x5D // GT911 / CST328 Touch
+  #define IS_GT911_TOUCH   1
+#else
+  #define I2C_SDA_PIN     21
+  #define I2C_SCL_PIN     22
+  #define LCD_DC_PIN      16
+  #define LCD_CS_PIN       5
+  #define LCD_CLK_PIN     18
+  #define LCD_MOSI_PIN    23
+  #define LCD_RST_PIN     17
+  #define LCD_BL_PIN       4
+  #define TP_INT_PIN      -1
+  #define TP_RST_PIN      -1
+  #define SCREEN_WIDTH   800
+  #define SCREEN_HEIGHT  480
+  #define TOUCH_I2C_ADDR 0x5D
+  #define IS_GT911_TOUCH   1
+#endif
+
+// =============================================================================
+// PCA9685 Servo Driver Constants
+// =============================================================================
+#define PCA9685_ADDR_LEFT   0x40 // Driver 1: Left Legs  (FL, ML, RL)
+#define PCA9685_ADDR_RIGHT  0x41 // Driver 2: Right Legs (FR, MR, RR)
+
+#define PCA9685_MODE1       0x00
+#define PCA9685_PRESCALE    0xFE
+#define PCA9685_LED0_ON_L   0x06
 
 // Servo Pulse Constants (50Hz PWM, 4096 steps per 20ms)
-#define SERVOMIN     150  // Min pulse length out of 4096 (0 deg)
-#define SERVOMAX     600  // Max pulse length out of 4096 (180 deg)
+#define SERVOMIN            150  // Min pulse length out of 4096 (0 deg)
+#define SERVOMAX            600  // Max pulse length out of 4096 (180 deg)
 
 // Hexapod Physical Link Dimensions (in mm)
 const float COXA_LEN  = 30.0f; // Hip swivel length
@@ -77,12 +140,27 @@ unsigned long moveStartTime = 0;
 unsigned long moveDurationMs = 200; // Default 200ms smooth interpolation
 bool isMoving = false;
 
-// Active Gait Motion state
+// Active Motion / Gait State
 String currentGait = "idle";
+String lastActionName = "STAND";
 unsigned long lastGaitStepTime = 0;
 int gaitStepIndex = 0;
 
-// Leg Code to Servo Index Map
+// LCD & UI Status Variables
+unsigned long lastDisplayRefresh = 0;
+unsigned long lastEyeBlink = 0;
+bool eyeBlinkState = false;
+String lcdStatusMessage = "Hexapod 7-Inch System Online";
+
+// Touch State
+bool isTouched = false;
+int touchX = 0;
+int touchY = 0;
+unsigned long lastTouchTime = 0;
+
+// =============================================================================
+// Helper Functions: Leg Index Mapping
+// =============================================================================
 // legIndex: 0=FL, 1=ML, 2=RL, 3=FR, 4=MR, 5=RR
 int getServoIndex(int legIndex, int joint) { // joint: 0=coxa, 1=femur, 2=tibia
   return (legIndex * 3) + joint;
@@ -99,7 +177,9 @@ int parseLegCode(String code) {
   return -1;
 }
 
-// Low-level PCA9685 I2C Write Functions
+// =============================================================================
+// PCA9685 Low-Level I2C Drivers
+// =============================================================================
 void writePCA9685(uint8_t addr, uint8_t reg, uint8_t data) {
   Wire.beginTransmission(addr);
   Wire.write(reg);
@@ -109,7 +189,7 @@ void writePCA9685(uint8_t addr, uint8_t reg, uint8_t data) {
 
 void setPCA9685PWM(uint8_t addr, uint8_t channel, uint16_t on, uint16_t off) {
   Wire.beginTransmission(addr);
-  Wire.write(LED0_ON_L + 4 * channel);
+  Wire.write(PCA9685_LED0_ON_L + 4 * channel);
   Wire.write(on & 0xFF);
   Wire.write(on >> 8);
   Wire.write(off & 0xFF);
@@ -118,14 +198,14 @@ void setPCA9685PWM(uint8_t addr, uint8_t channel, uint16_t on, uint16_t off) {
 }
 
 void initPCA9685(uint8_t addr) {
-  writePCA9685(addr, MODE1, 0x00);
+  writePCA9685(addr, PCA9685_MODE1, 0x00);
   delay(10);
   // Set frequency to 50Hz for standard servos (prescale = 121)
-  writePCA9685(addr, MODE1, 0x10); // Sleep mode
-  writePCA9685(addr, PRESCALE, 121);
-  writePCA9685(addr, MODE1, 0x00); // Wake up
+  writePCA9685(addr, PCA9685_MODE1, 0x10); // Sleep mode
+  writePCA9685(addr, PCA9685_PRESCALE, 121);
+  writePCA9685(addr, PCA9685_MODE1, 0x00); // Wake up
   delay(5);
-  writePCA9685(addr, MODE1, 0xA1); // Auto-increment
+  writePCA9685(addr, PCA9685_MODE1, 0xA1); // Auto-increment
 }
 
 void writeHardwareAngle(int servoIndex, float angle) {
@@ -137,13 +217,9 @@ void writeHardwareAngle(int servoIndex, float angle) {
   setPCA9685PWM(addr, channel, 0, pulse);
 }
 
-// -------------------------------------------------------------
+// =============================================================================
 // 3-DOF Inverse Kinematics (IK) Solver
-// -------------------------------------------------------------
-// Computes coxa, femur, and tibia angles given foot Cartesian coordinates (x, y, z)
-// x: Forward/Backward displacement relative to hip
-// y: Outward displacement relative to hip
-// z: Downward vertical displacement relative to hip
+// =============================================================================
 bool solveIK(float x, float y, float z, bool isRightLeg, float &coxaDeg, float &femurDeg, float &tibiaDeg) {
   float coxaRad = atan2(x, y); // Swivel angle
   float r = sqrt(x * x + y * y) - COXA_LEN;
@@ -182,9 +258,9 @@ bool solveIK(float x, float y, float z, bool isRightLeg, float &coxaDeg, float &
   return true;
 }
 
-// -------------------------------------------------------------
+// =============================================================================
 // Trajectory & Motion Interpolation Engine (50Hz Update Loop)
-// -------------------------------------------------------------
+// =============================================================================
 void setTargetAngles(const float newTargets[TOTAL_SERVOS], unsigned long durationMs) {
   for (int i = 0; i < TOTAL_SERVOS; i++) {
     startAngles[i] = currentAngles[i];
@@ -224,9 +300,9 @@ void updateTrajectoryEngine() {
   }
 }
 
-// -------------------------------------------------------------
-// Preset Postures & Motion Routines
-// -------------------------------------------------------------
+// =============================================================================
+// Postures & Motion Routines
+// =============================================================================
 void applyStandPosture(unsigned long durationMs = 300) {
   float newTargets[TOTAL_SERVOS];
   for (int leg = 0; leg < 6; leg++) {
@@ -235,6 +311,8 @@ void applyStandPosture(unsigned long durationMs = 300) {
     newTargets[getServoIndex(leg, 2)] = 90.0f; // Tibia perpendicular
   }
   setTargetAngles(newTargets, durationMs);
+  lastActionName = "STAND";
+  lcdStatusMessage = "Hexapod Standing Upright";
 }
 
 void applySitPosture(unsigned long durationMs = 400) {
@@ -245,6 +323,8 @@ void applySitPosture(unsigned long durationMs = 400) {
     newTargets[getServoIndex(leg, 2)] = 150.0f;
   }
   setTargetAngles(newTargets, durationMs);
+  lastActionName = "SIT";
+  lcdStatusMessage = "Hexapod Sitting Down";
 }
 
 void applyFlatPosture(unsigned long durationMs = 400) {
@@ -255,15 +335,44 @@ void applyFlatPosture(unsigned long durationMs = 400) {
     newTargets[getServoIndex(leg, 2)] = 0.0f;
   }
   setTargetAngles(newTargets, durationMs);
+  lastActionName = "FLAT";
+  lcdStatusMessage = "Hexapod Flat to Floor";
+}
+
+void applyBowPosture(unsigned long durationMs = 400) {
+  float newTargets[TOTAL_SERVOS];
+  for (int leg = 0; leg < 6; leg++) {
+    newTargets[getServoIndex(leg, 0)] = 90.0f;
+    if (leg == 0 || leg == 3) {
+      newTargets[getServoIndex(leg, 1)] = 20.0f;
+      newTargets[getServoIndex(leg, 2)] = 160.0f;
+    } else {
+      newTargets[getServoIndex(leg, 1)] = 110.0f;
+      newTargets[getServoIndex(leg, 2)] = 80.0f;
+    }
+  }
+  setTargetAngles(newTargets, durationMs);
+  lastActionName = "BOW";
+  lcdStatusMessage = "Hexapod Bowing";
+}
+
+void applyWavePosture(bool isRight, unsigned long durationMs = 300) {
+  float targets[TOTAL_SERVOS];
+  memcpy(targets, currentAngles, sizeof(targets));
+  int legIdx = isRight ? 3 : 0;
+  targets[getServoIndex(legIdx, 1)] = 150.0f;
+  targets[getServoIndex(legIdx, 2)] = 40.0f;
+  targets[getServoIndex(legIdx, 0)] = isRight ? 130.0f : 50.0f;
+  setTargetAngles(targets, durationMs);
+  lastActionName = isRight ? "WAVE R" : "WAVE L";
+  lcdStatusMessage = isRight ? "Waving Right Arm" : "Waving Left Arm";
 }
 
 // Tripod Gait Step Engine
 void updateGaitEngine() {
   if (currentGait == "idle" || currentGait == "stop") return;
-  if (isMoving) return; // Wait for current trajectory to complete smoothly
+  if (isMoving) return;
 
-  unsigned long now = millis();
-  
   if (currentGait == "walk" || currentGait == "run") {
     int stepDuration = (currentGait == "run") ? 120 : 220;
     
@@ -273,39 +382,35 @@ void updateGaitEngine() {
     memcpy(targets, targetAngles, sizeof(targets));
     
     if (gaitStepIndex == 0) {
-      // Step 1: Lift Group A, Push Group B backward
-      targets[getServoIndex(0, 1)] = 120.0f; // FL Femur lift
-      targets[getServoIndex(4, 1)] = 120.0f; // MR Femur lift
-      targets[getServoIndex(2, 1)] = 120.0f; // RL Femur lift
-      targets[getServoIndex(0, 0)] = 120.0f; // FL Coxa forward
-      targets[getServoIndex(4, 0)] = 120.0f; // MR Coxa forward
-      targets[getServoIndex(2, 0)] = 120.0f; // RL Coxa forward
+      targets[getServoIndex(0, 1)] = 120.0f;
+      targets[getServoIndex(4, 1)] = 120.0f;
+      targets[getServoIndex(2, 1)] = 120.0f;
+      targets[getServoIndex(0, 0)] = 120.0f;
+      targets[getServoIndex(4, 0)] = 120.0f;
+      targets[getServoIndex(2, 0)] = 120.0f;
       
-      targets[getServoIndex(3, 0)] = 60.0f;  // FR Coxa back
-      targets[getServoIndex(1, 0)] = 60.0f;  // ML Coxa back
-      targets[getServoIndex(5, 0)] = 60.0f;  // RR Coxa back
+      targets[getServoIndex(3, 0)] = 60.0f;
+      targets[getServoIndex(1, 0)] = 60.0f;
+      targets[getServoIndex(5, 0)] = 60.0f;
       gaitStepIndex = 1;
     } else if (gaitStepIndex == 1) {
-      // Step 2: Lower Group A to ground
       targets[getServoIndex(0, 1)] = 90.0f;
       targets[getServoIndex(4, 1)] = 90.0f;
       targets[getServoIndex(2, 1)] = 90.0f;
       gaitStepIndex = 2;
     } else if (gaitStepIndex == 2) {
-      // Step 3: Lift Group B, Push Group A backward
-      targets[getServoIndex(3, 1)] = 120.0f; // FR Femur lift
-      targets[getServoIndex(1, 1)] = 120.0f; // ML Femur lift
-      targets[getServoIndex(5, 1)] = 120.0f; // RR Femur lift
-      targets[getServoIndex(3, 0)] = 120.0f; // FR Coxa forward
-      targets[getServoIndex(1, 0)] = 120.0f; // ML Coxa forward
-      targets[getServoIndex(5, 0)] = 120.0f; // RR Coxa forward
+      targets[getServoIndex(3, 1)] = 120.0f;
+      targets[getServoIndex(1, 1)] = 120.0f;
+      targets[getServoIndex(5, 1)] = 120.0f;
+      targets[getServoIndex(3, 0)] = 120.0f;
+      targets[getServoIndex(1, 0)] = 120.0f;
+      targets[getServoIndex(5, 0)] = 120.0f;
       
-      targets[getServoIndex(0, 0)] = 60.0f;  // FL Coxa back
-      targets[getServoIndex(4, 0)] = 60.0f;  // MR Coxa back
-      targets[getServoIndex(2, 0)] = 60.0f;  // RL Coxa back
+      targets[getServoIndex(0, 0)] = 60.0f;
+      targets[getServoIndex(4, 0)] = 60.0f;
+      targets[getServoIndex(2, 0)] = 60.0f;
       gaitStepIndex = 3;
     } else {
-      // Step 4: Lower Group B to ground
       targets[getServoIndex(3, 1)] = 90.0f;
       targets[getServoIndex(1, 1)] = 90.0f;
       targets[getServoIndex(5, 1)] = 90.0f;
@@ -329,14 +434,235 @@ void updateGaitEngine() {
   }
 }
 
-// -------------------------------------------------------------
-// Command Parser (Serial & Bluetooth)
-// -------------------------------------------------------------
+// =============================================================================
+// Capacitive Touch Driver (GT911 & CST816S Multi-Touch Controller)
+// =============================================================================
+void initTouchController() {
+  if (TP_RST_PIN >= 0) {
+    pinMode(TP_RST_PIN, OUTPUT);
+    digitalWrite(TP_RST_PIN, LOW);
+    delay(10);
+    digitalWrite(TP_RST_PIN, HIGH);
+    delay(50);
+  }
+  if (TP_INT_PIN >= 0) {
+    pinMode(TP_INT_PIN, INPUT_PULLUP);
+  }
+}
+
+bool readTouch(int &x, int &y) {
+#if IS_GT911_TOUCH
+  // GT911 5-point capacitive touch register polling
+  Wire.beginTransmission((uint8_t)TOUCH_I2C_ADDR);
+  Wire.write(0x81);
+  Wire.write(0x4E); // Register 0x814E: Buffer status & point count
+  if (Wire.endTransmission() != 0) return false;
+
+  Wire.requestFrom((uint8_t)TOUCH_I2C_ADDR, (uint8_t)1);
+  if (Wire.available() < 1) return false;
+  uint8_t status = Wire.read();
+
+  bool pointReady = (status & 0x80) != 0;
+  uint8_t points = status & 0x0F;
+
+  if (pointReady && points > 0) {
+    Wire.beginTransmission((uint8_t)TOUCH_I2C_ADDR);
+    Wire.write(0x81);
+    Wire.write(0x50); // Point 1 coordinate registers
+    Wire.endTransmission();
+
+    Wire.requestFrom((uint8_t)TOUCH_I2C_ADDR, (uint8_t)6);
+    if (Wire.available() >= 6) {
+      uint8_t trackId = Wire.read();
+      uint8_t xLow    = Wire.read();
+      uint8_t xHigh   = Wire.read();
+      uint8_t yLow    = Wire.read();
+      uint8_t yHigh   = Wire.read();
+      uint8_t pSize   = Wire.read();
+
+      x = (xHigh << 8) | xLow;
+      y = (yHigh << 8) | yLow;
+
+      // Clear buffer status flag by writing 0 to 0x814E
+      Wire.beginTransmission((uint8_t)TOUCH_I2C_ADDR);
+      Wire.write(0x81);
+      Wire.write(0x4E);
+      Wire.write(0x00);
+      Wire.endTransmission();
+      return true;
+    }
+  }
+
+  // Clear buffer flag
+  Wire.beginTransmission((uint8_t)TOUCH_I2C_ADDR);
+  Wire.write(0x81);
+  Wire.write(0x4E);
+  Wire.write(0x00);
+  Wire.endTransmission();
+  return false;
+#else
+  // CST816S capacitive touch polling
+  Wire.beginTransmission((uint8_t)TOUCH_I2C_ADDR);
+  Wire.write(0x01);
+  if (Wire.endTransmission() != 0) return false;
+
+  Wire.requestFrom((uint8_t)TOUCH_I2C_ADDR, (uint8_t)6);
+  if (Wire.available() >= 6) {
+    uint8_t gesture = Wire.read();
+    uint8_t points  = Wire.read();
+    uint8_t xHigh   = Wire.read();
+    uint8_t xLow    = Wire.read();
+    uint8_t yHigh   = Wire.read();
+    uint8_t yLow    = Wire.read();
+
+    if (points > 0) {
+      x = ((xHigh & 0x0F) << 8) | xLow;
+      y = ((yHigh & 0x0F) << 8) | yLow;
+      return true;
+    }
+  }
+  return false;
+#endif
+}
+
+// =============================================================================
+// 7-Inch Capacitive Touchscreen UI Dashboard Layout
+// =============================================================================
+struct TouchButton {
+  const char* label;
+  int x, y, w, h;
+  const char* action;
+  uint16_t color;
+};
+
+// 7-inch Widescreen (800x480) Touch Button Layout
+#if defined(BOARD_ESP32_TOUCH_LCD_7)
+const TouchButton TOUCH_BTNS[] = {
+  // Column 1: Core Postures
+  {"STAND",       30, 100, 150, 60, "stand",       0x2595},
+  {"SIT",         30, 175, 150, 60, "sit",         0xD5A0},
+  {"FLAT",        30, 250, 150, 60, "flat",        0x7BEF},
+  {"BOW",         30, 325, 150, 60, "bow",         0x07E0},
+
+  // Column 2: Gaits & Movement
+  {"WALK",       200, 100, 150, 60, "walk",        0x04FF},
+  {"RUN",        200, 175, 150, 60, "run",         0xF800},
+  {"DANCE",      200, 250, 150, 60, "dance",       0xF81F},
+  {"STOP",       200, 325, 150, 60, "stop",        0xF800},
+
+  // Column 3: Gestures & Rotation
+  {"WAVE LEFT",  370, 100, 150, 60, "wave_left",   0xFD20},
+  {"WAVE RIGHT", 370, 175, 150, 60, "wave_right",  0xFD20},
+  {"TURN LEFT",  370, 250, 150, 60, "turn_left",   0x0284},
+  {"TURN RIGHT", 370, 325, 150, 60, "turn_right",  0x0284},
+
+  // Speed Controls
+  {"SPEED -",    550, 325, 100, 60, "speed_down",  0x3341},
+  {"SPEED +",    665, 325, 100, 60, "speed_up",    0x3341},
+};
+#else
+// Compact 240x240 / 240x320 Layout
+const TouchButton TOUCH_BTNS[] = {
+  {"STAND",   15, 120, 65, 30, "stand", 0x2595},
+  {"SIT",     87, 120, 65, 30, "sit",   0xD5A0},
+  {"FLAT",   160, 120, 65, 30, "flat",  0x7BEF},
+  {"WALK",    15, 155, 65, 30, "walk",  0x04FF},
+  {"RUN",     87, 155, 65, 30, "run",   0xF800},
+  {"DANCE",  160, 155, 65, 30, "dance", 0xF81F},
+  {"BOW",     15, 190, 65, 30, "bow",   0x07E0},
+  {"STOP",    87, 190, 65, 30, "stop",  0xF800},
+  {"WAVE",   160, 190, 65, 30, "wave",  0xFD20},
+};
+#endif
+const int NUM_TOUCH_BTNS = sizeof(TOUCH_BTNS) / sizeof(TouchButton);
+
+void handleTouchAction(String action) {
+  if (action == "stand") {
+    currentGait = "idle";
+    applyStandPosture();
+  } else if (action == "sit") {
+    currentGait = "idle";
+    applySitPosture();
+  } else if (action == "flat") {
+    currentGait = "idle";
+    applyFlatPosture();
+  } else if (action == "walk") {
+    currentGait = "walk";
+    lastActionName = "WALK";
+    lcdStatusMessage = "Gait: Tripod Walk";
+    gaitStepIndex = 0;
+  } else if (action == "run") {
+    currentGait = "run";
+    lastActionName = "RUN";
+    lcdStatusMessage = "Gait: Fast Run";
+    gaitStepIndex = 0;
+  } else if (action == "dance") {
+    currentGait = "dance";
+    lastActionName = "DANCE";
+    lcdStatusMessage = "Routine: Dance";
+    gaitStepIndex = 0;
+  } else if (action == "bow") {
+    currentGait = "idle";
+    applyBowPosture();
+  } else if (action == "wave" || action == "wave_right") {
+    currentGait = "idle";
+    applyWavePosture(true);
+  } else if (action == "wave_left") {
+    currentGait = "idle";
+    applyWavePosture(false);
+  } else if (action == "turn_left") {
+    lastActionName = "TURN L";
+    lcdStatusMessage = "Turning Left";
+  } else if (action == "turn_right") {
+    lastActionName = "TURN R";
+    lcdStatusMessage = "Turning Right";
+  } else if (action == "speed_up") {
+    if (moveDurationMs > 50) moveDurationMs -= 30;
+    lcdStatusMessage = "Speed: " + String(moveDurationMs) + "ms";
+  } else if (action == "speed_down") {
+    moveDurationMs += 30;
+    lcdStatusMessage = "Speed: " + String(moveDurationMs) + "ms";
+  } else if (action == "stop") {
+    currentGait = "idle";
+    applyStandPosture(200);
+    lastActionName = "STOP";
+    lcdStatusMessage = "Stopped / Stand";
+  }
+
+  Serial.print("[7-Inch Touch LCD] Action Triggered: ");
+  Serial.println(action);
+}
+
+void processTouchInput() {
+  int tx, ty;
+  if (readTouch(tx, ty)) {
+    if (!isTouched || (millis() - lastTouchTime > 200)) {
+      isTouched = true;
+      lastTouchTime = millis();
+      touchX = tx;
+      touchY = ty;
+
+      for (int i = 0; i < NUM_TOUCH_BTNS; i++) {
+        if (tx >= TOUCH_BTNS[i].x && tx <= (TOUCH_BTNS[i].x + TOUCH_BTNS[i].w) &&
+            ty >= TOUCH_BTNS[i].y && ty <= (TOUCH_BTNS[i].y + TOUCH_BTNS[i].h)) {
+          handleTouchAction(TOUCH_BTNS[i].action);
+          break;
+        }
+      }
+    }
+  } else {
+    isTouched = false;
+  }
+}
+
+// =============================================================================
+// Command Parser (Serial, Bluetooth & Web)
+// =============================================================================
 void parseCommand(String cmd) {
   cmd.trim();
   if (cmd.length() == 0) return;
 
-  Serial.print("[Hexapod CMD Received] ");
+  Serial.print("[Hexapod CMD] ");
   Serial.println(cmd);
 
   // 1. Direct Servo Command: "HEX:SERVO:<driver>:<chan>:<deg>"
@@ -352,13 +678,14 @@ void parseCommand(String cmd) {
       int servoIdx = (driver == 1 ? 0 : 9) + chan;
       if (servoIdx >= 0 && servoIdx < TOTAL_SERVOS) {
         setSingleTargetAngle(servoIdx, deg, moveDurationMs);
+        lcdStatusMessage = "Servo D" + String(driver) + " Ch" + String(chan) + " -> " + String((int)deg) + "d";
         Serial.print("[Hexapod] Driver ");
         Serial.print(driver);
         Serial.print(" Chan ");
         Serial.print(chan);
         Serial.print(" -> ");
         Serial.print(deg);
-        Serial.println(" deg (Interpolated)");
+        Serial.println(" deg");
       }
     }
     return;
@@ -366,7 +693,6 @@ void parseCommand(String cmd) {
 
   // 2. Inverse Kinematics Command: "HEX:IK:<leg>:<X>:<Y>:<Z>:<ms>"
   if (cmd.startsWith("HEX:IK:") || cmd.startsWith("hex:ik:")) {
-    // Parsing HEX:IK:FL:0:50:80:300
     int p[5];
     int cur = 6;
     for (int i = 0; i < 5; i++) {
@@ -393,12 +719,14 @@ void parseCommand(String cmd) {
         targets[getServoIndex(legIdx, 1)] = femurDeg;
         targets[getServoIndex(legIdx, 2)] = tibiaDeg;
         setTargetAngles(targets, dur);
+        lcdStatusMessage = "IK: " + legCode + " (" + String((int)x) + "," + String((int)y) + "," + String((int)z) + ")";
         Serial.print("[IK Success] ");
         Serial.print(legCode);
         Serial.print(" -> Coxa: "); Serial.print(coxaDeg);
         Serial.print(" Femur: "); Serial.print(femurDeg);
         Serial.print(" Tibia: "); Serial.println(tibiaDeg);
       } else {
+        lcdStatusMessage = "IK Error: Out of Reach";
         Serial.print("[IK Error] Position out of reach for leg ");
         Serial.println(legCode);
       }
@@ -412,63 +740,86 @@ void parseCommand(String cmd) {
     if (col != -1) {
       moveDurationMs = cmd.substring(col + 1).toInt();
       if (moveDurationMs < 20) moveDurationMs = 20;
-      Serial.print("[Hexapod] Global Trajectory Speed set to ");
+      lcdStatusMessage = "Speed: " + String(moveDurationMs) + "ms";
+      Serial.print("[Hexapod] Speed set to ");
       Serial.print(moveDurationMs);
       Serial.println(" ms");
     }
     return;
   }
 
-  // 4. Action & Gait Commands: "HEX:stand", "HEX:walk", etc.
+  // 4. Custom LCD Text Command: "HEX:LCD:MSG:<text>"
+  if (cmd.startsWith("HEX:LCD:MSG:") || cmd.startsWith("hex:lcd:msg:")) {
+    lcdStatusMessage = cmd.substring(12);
+    Serial.println("[7-Inch Touch LCD] Message Displayed: " + lcdStatusMessage);
+    return;
+  }
+
+  // 5. Action & Gait Commands
   if (cmd == "HEX:stand" || cmd == "hex:stand") {
-    currentGait = "idle";
-    applyStandPosture();
+    handleTouchAction("stand");
   } else if (cmd == "HEX:sit" || cmd == "hex:sit") {
-    currentGait = "idle";
-    applySitPosture();
+    handleTouchAction("sit");
   } else if (cmd == "HEX:flat" || cmd == "hex:flat") {
-    currentGait = "idle";
-    applyFlatPosture();
+    handleTouchAction("flat");
   } else if (cmd == "HEX:walk" || cmd == "hex:walk") {
-    currentGait = "walk";
-    gaitStepIndex = 0;
+    handleTouchAction("walk");
   } else if (cmd == "HEX:run" || cmd == "hex:run") {
-    currentGait = "run";
-    gaitStepIndex = 0;
+    handleTouchAction("run");
   } else if (cmd == "HEX:dance" || cmd == "hex:dance") {
-    currentGait = "dance";
-    gaitStepIndex = 0;
+    handleTouchAction("dance");
+  } else if (cmd == "HEX:bow" || cmd == "hex:bow") {
+    handleTouchAction("bow");
+  } else if (cmd == "HEX:wave_left" || cmd == "hex:wave_left") {
+    handleTouchAction("wave_left");
+  } else if (cmd == "HEX:wave_right" || cmd == "hex:wave_right") {
+    handleTouchAction("wave_right");
+  } else if (cmd == "HEX:turn_left" || cmd == "hex:turn_left") {
+    handleTouchAction("turn_left");
+  } else if (cmd == "HEX:turn_right" || cmd == "hex:turn_right") {
+    handleTouchAction("turn_right");
   } else if (cmd == "HEX:stop" || cmd == "hex:stop") {
-    currentGait = "idle";
-    applyStandPosture(200);
+    handleTouchAction("stop");
   }
 }
 
-// -------------------------------------------------------------
+// =============================================================================
 // Arduino Setup & Main Loop
-// -------------------------------------------------------------
+// =============================================================================
 void setup() {
   Serial.begin(115200);
   while (!Serial && millis() < 2000);
 
-  Serial.println("==============================================");
-  Serial.println("🤖 ESP32 Hexapod Firmware Initializing...");
-  Serial.println("Features: Bluetooth Classic + IK + 50Hz Interpolation");
-  Serial.println("==============================================");
+  Serial.println("==========================================================");
+  Serial.println("🤖 ESP32-S3 7.0-Inch Capacitive Touchscreen Hexapod Robot");
+  Serial.println("Display: 800x480 Widescreen RGB | Touch: GT911 Capacitive");
+  Serial.println("I2C Bus: SDA=GPIO 8, SCL=GPIO 9 | Dual PCA9685 18 Servos");
+  Serial.println("Board Substituted: ESP-32 DevKit -> ESP32-S3-Touch-LCD-7");
+  Serial.println("==========================================================");
 
-  // Initialize Bluetooth Classic Serial
-  if (SerialBT.begin("hexapod")) {
-    Serial.println("[Bluetooth] ESP32 Broadcasting as 'hexapod' READY!");
-  } else {
-    Serial.println("[Bluetooth] Failed to start Bluetooth Serial!");
-  }
+  // Initialize I2C Bus on 7-inch Touch LCD pins (SDA=GPIO 8, SCL=GPIO 9)
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  Wire.setClock(400000); // 400kHz Fast I2C
 
-  // Initialize I2C Bus and PCA9685 Drivers
-  Wire.begin(21, 22); // SDA=21, SCL=22
+  // Initialize Dual PCA9685 Servo Drivers
   initPCA9685(PCA9685_ADDR_LEFT);
   initPCA9685(PCA9685_ADDR_RIGHT);
+  Serial.println("[I2C] Dual PCA9685 Servo Drivers (0x40 & 0x41) Initialized.");
 
-  // Initialize default angles to standing posture (90 deg per servo)
+  // Initialize GT911 Capacitive Touch Controller
+  initTouchController();
+  Serial.println("[Touch] GT911 5-Point Capacitive Touch Controller Initialized.");
+
+  // Initialize Bluetooth if supported
+#if HAS_BT_CLASSIC
+  if (SerialBT.begin("hexapod-touch-7")) {
+    Serial.println("[Bluetooth] Broadcasting as 'hexapod-touch-7' READY!");
+  }
+#else
+  Serial.println("[Info] High-speed USB CDC Serial active for ESP32-S3 7-Inch Touch LCD.");
+#endif
+
+  // Initialize default standing posture (90 deg per servo)
   for (int i = 0; i < TOTAL_SERVOS; i++) {
     currentAngles[i] = 90.0f;
     startAngles[i]   = 90.0f;
@@ -476,8 +827,9 @@ void setup() {
     writeHardwareAngle(i, 90.0f);
   }
 
-  Serial.println("[Hexapod] Drivers 0x40 & 0x41 Initialized to 90 Deg Stand Posture.");
-  Serial.println("==============================================");
+  applyStandPosture(300);
+  Serial.println("[Hexapod] 18 Servos Initialized to 90 Deg Stand Posture.");
+  Serial.println("==========================================================");
 }
 
 void loop() {
@@ -487,16 +839,21 @@ void loop() {
     parseCommand(cmd);
   }
 
-  // 2. Process Bluetooth Commands
+  // 2. Process Bluetooth Commands (if available)
+#if HAS_BT_CLASSIC
   if (SerialBT.available() > 0) {
     String cmd = SerialBT.readStringUntil('\n');
     parseCommand(cmd);
   }
+#endif
 
-  // 3. Update 50Hz S-Curve Trajectory Interpolation Engine
+  // 3. Process 7-Inch Capacitive Touchscreen Events
+  processTouchInput();
+
+  // 4. Update 50Hz S-Curve Trajectory Interpolation Engine
   updateTrajectoryEngine();
 
-  // 4. Update Gait Motion Step Loop
+  // 5. Update Gait Motion Step Loop
   updateGaitEngine();
 
   delay(2); // Short loop pause for CPU efficiency

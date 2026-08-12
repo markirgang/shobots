@@ -620,6 +620,50 @@ async function connectSession() {
                   }
                 },
                 {
+                  name: "trigger_bird_routine",
+                  description: "Triggers automated choreography routines or light shows on the Waveshare 7-inch Touch LCD ESP32 controller (with MCP23017 and dual PCA9685 drivers). Supported routines: 'sing', 'sweep', 'dance', 'lightshow', 'symphony', 'home'.",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      routine: {
+                        type: "STRING",
+                        description: "Routine name: 'sing', 'sweep', 'dance', 'lightshow', 'symphony', 'home'."
+                      }
+                    },
+                    required: ["routine"]
+                  }
+                },
+                {
+                  name: "control_hexapod",
+                  description: "Controls the 6-leg Hexapod robot driven by the ESP-32-Touch-LCD controller (over Bluetooth 'hexapod-touch-lcd' or USB serial). Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message'. Can also adjust leg joints or display custom text on the onboard Touch LCD.",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      action: {
+                        type: "STRING",
+                        description: "Motion preset or action: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_joint', 'set_ik', 'set_lcd_message'."
+                      },
+                      leg_name: {
+                        type: "STRING",
+                        description: "Leg identifier: 'FL', 'ML', 'RL', 'FR', 'MR', 'RR'."
+                      },
+                      joint_name: {
+                        type: "STRING",
+                        description: "Joint name: 'coxa', 'femur', 'tibia'."
+                      },
+                      angle: {
+                        type: "INTEGER",
+                        description: "Target angle in degrees (0-180)."
+                      },
+                      lcd_message: {
+                        type: "STRING",
+                        description: "Custom text or status message to display on the robot's onboard ESP-32-Touch-LCD screen."
+                      }
+                    },
+                    required: ["action"]
+                  }
+                },
+                {
                   name: "send_tello_command",
                   description: "Sends a control command to the Tello drone over UDP. Supported commands include takeoff, land, up, down, left, right, forward, back, cw, ccw, flip, emergency.",
                   parameters: {
@@ -744,9 +788,39 @@ async function connectSession() {
               channel = sliderMatch ? parseInt(sliderMatch.dataset.channel) : 0;
             }
             updateServoUI(board, channel, angle);
-            writeSerialCommand(`SERVO:${channel}:${angle}\n`);
+            const prefix = (board === "right") ? "SERVO:R:" : "SERVO:L:";
+            writeSerialCommand(`${prefix}${channel}:${angle}\n`);
             result = { status: "success", board: board, channel: channel, angle: angle, servo_name: servoName };
             appendSystemMessage(`[PCA9685 Servo] Set ${servoName} (${board.toUpperCase()} Ch ${channel}) to ${angle}°`);
+          } else if (fc.name === "trigger_bird_routine") {
+            const routine = (fc.args.routine || "home").toLowerCase();
+            writeSerialCommand(`ROUTINE:${routine}\n`);
+            result = { status: "success", routine: routine, device: "Waveshare-7-Touch-LCD" };
+            appendSystemMessage(`[Waveshare 7" Touch-LCD] Triggered Routine: ${routine.toUpperCase()}`);
+          } else if (fc.name === "control_hexapod") {
+            const action = fc.args.action || "stand";
+            const legName = fc.args.leg_name;
+            const jointName = fc.args.joint_name;
+            const angle = fc.args.angle;
+            const lcdMsg = fc.args.lcd_message;
+
+            if (lcdMsg) {
+              writeSerialCommand(`HEX:LCD:MSG:${lcdMsg}\n`);
+            }
+
+            if (legName && jointName && angle !== undefined) {
+              const driver = (legName === 'FR' || legName === 'MR' || legName === 'RR') ? 2 : 1;
+              let ch = 0;
+              if (jointName === 'femur') ch = 1;
+              else if (jointName === 'tibia') ch = 2;
+              writeSerialCommand(`HEX:SERVO:${driver}:${ch}:${angle}\n`);
+              result = { status: "success", leg: legName, joint: jointName, angle: angle, device: "ESP-32-Touch-LCD" };
+              appendSystemMessage(`[ESP-32-Touch-LCD Hexapod] Set Leg ${legName} ${jointName} to ${angle}°`);
+            } else {
+              writeSerialCommand(`HEX:${action}\n`);
+              result = { status: "success", action: action, device: "ESP-32-Touch-LCD" };
+              appendSystemMessage(`[ESP-32-Touch-LCD Hexapod] Executed action: ${action}`);
+            }
           }
           
           functionResponses.push({
@@ -1467,17 +1541,29 @@ function updateServoUI(board, channel, angle) {
   });
 }
 
-// Attach event listeners for all PCA9685 Servo sliders
+// Attach event listeners for all PCA9685 Servo sliders and Bird routines
 document.addEventListener('DOMContentLoaded', () => {
   const servoSliders = document.querySelectorAll('.servo-range-slider');
   servoSliders.forEach(slider => {
     slider.addEventListener('input', (e) => {
-      const board = e.target.dataset.board;
+      const board = (e.target.dataset.board || 'left').toLowerCase();
       const channel = e.target.dataset.channel;
       const val = e.target.value;
       const badge = document.getElementById(`lbl-${board}-${channel}`);
       if (badge) badge.textContent = `${val}°`;
-      writeSerialCommand(`SERVO:${channel}:${val}\n`);
+      const prefix = (board === 'right') ? 'SERVO:R:' : 'SERVO:L:';
+      writeSerialCommand(`${prefix}${channel}:${val}\n`);
+    });
+  });
+
+  const routineBtns = document.querySelectorAll('.bird-routine-btn');
+  routineBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const routine = btn.dataset.routine;
+      if (routine) {
+        writeSerialCommand(`ROUTINE:${routine}\n`);
+        appendSystemMessage(`[Waveshare 7" Touch-LCD] Triggered Routine: ${routine.toUpperCase()}`);
+      }
     });
   });
 });
