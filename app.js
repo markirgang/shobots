@@ -460,7 +460,7 @@ if (!systemInstruction.value.trim()) {
    - When estimating time or counting seconds, use the number of incoming frames as your clock.
 
  3. HARDWARE CONTROL:
-   - ESP32 PCA9685 Servos: You MUST use the set_servo_angle tool when the user asks verbally or visually to move, position, turn, or adjust any of the servos on the Left or Right ESP32 (e.g. Left/Right Parrot Up/Dn, Right Spotlight Rotate, Center Bird Up/Dn, Center Turntable Rotate, etc.) to a specific degree angle (0 to 180 degrees).
+    - ESP32 PCA9685 Servos: You MUST use the set_servo_angle tool when the user asks verbally or visually to move, position, turn, or adjust any of the servos on the Birds ESP32-S3 Touchscreen (Left/Right sides) (e.g. Left/Right Parrot Up/Dn, Right Spotlight Rotate, Center Bird Up/Dn, Center Turntable Rotate, etc.) to a specific degree angle (0 to 180 degrees).
    - Parrot Speaker Selection & Reactivity: You MUST use the select_active_parrot tool when the user asks to switch which parrot speaks/animates ('left', 'right', or 'both'), and set_parrot_sound_reactivity to toggle auto-sound reactivity.
    - ESP32 LED: You MUST use the set_led_state tool to turn the LED on or off. If the user asks you to pulse, blink, or flash the LED a certain number of times (e.g., to match the count of fingers you see in the frame), you MUST use the pulse_led tool with the appropriate count.
    - Tello Drone: You MUST use the send_tello_command tool to control the Tello drone when the user asks you to perform actions like takeoff, landing, moving, flipping, or rotating.
@@ -596,13 +596,13 @@ async function connectSession() {
                 },
                 {
                   name: "set_servo_angle",
-                  description: "Controls a PCA9685 servo driver channel attached to either the Left or Right ESP32 board. Left ESP32 Servos: 'Left Parrot Up/Dn' (0), 'Left Parrot Right/Left' (1), 'Left Parrot Rotate' (2), 'Left Spotlight Up/Dn' (3), 'Left Spotlight Rotate' (4), 'Center Bird Up/Dn' (5), 'Center Bird Right/Left' (6), 'Center Bird Rotate' (7). Right ESP32 Servos: 'Right Parrot Up/Dn' (0), 'Right Parrot Right/Left' (1), 'Right Parrot Rotate' (2), 'Right Spotlight Up/Dn' (3), 'Right Spotlight Rotate' (4), 'Center Turntable Rotate' (5). Degree range is 0 to 180 (default 90 degrees).",
+                  description: "Controls a PCA9685 servo driver channel on the unified Waveshare 7-inch ESP32-S3 Touchscreen Birds controller (Driver 1 for Left Side, Driver 2 for Right Side). Left Side Servos (Driver 1): 'Left Parrot Up/Dn' (0), 'Left Parrot Right/Left' (1), 'Left Parrot Rotate' (2), 'Left Spotlight Up/Dn' (3), 'Left Spotlight Rotate' (4), 'Center Bird Up/Dn' (5), 'Center Bird Right/Left' (6), 'Center Bird Rotate' (7). Right Side Servos (Driver 2): 'Right Parrot Up/Dn' (0), 'Right Parrot Right/Left' (1), 'Right Parrot Rotate' (2), 'Right Spotlight Up/Dn' (3), 'Right Spotlight Rotate' (4), 'Center Turntable Rotate' (5). Degree range is 0 to 180 (default 90 degrees).",
                   parameters: {
                     type: "OBJECT",
                     properties: {
                       board: {
                         type: "STRING",
-                        description: "Target ESP32 board: 'left' or 'right'."
+                        description: "Target servo side / board: 'left' (Driver 1) or 'right' (Driver 2)."
                       },
                       servo_name: {
                         type: "STRING",
