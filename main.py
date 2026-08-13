@@ -637,6 +637,46 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
             }
         )
     )
+
+    # Add Parrot Selection & Sound Reactivity tool
+    function_declarations.append(
+        types.FunctionDeclaration(
+            name="select_active_parrot",
+            description=(
+                "Selects which parrot ('left', 'right', or 'both') will mouth the words, flap its wings, "
+                "sway its 3 base servos (up/down, right/left side-to-side, turn), and activate its spotlight when the AI speaks."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "parrot": {
+                        "type": "string",
+                        "description": "Target parrot: 'left', 'right', or 'both'."
+                    }
+                },
+                "required": ["parrot"]
+            }
+        )
+    )
+
+    function_declarations.append(
+        types.FunctionDeclaration(
+            name="set_parrot_sound_reactivity",
+            description=(
+                "Enables or disables automatic microphone sound detection and AI voice animatronics for the parrots."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "True to enable auto-reactivity, False to disable."
+                    }
+                },
+                "required": ["enabled"]
+            }
+        )
+    )
     
     if function_declarations:
         tools.append(types.Tool(function_declarations=function_declarations))
@@ -1788,6 +1828,93 @@ class ESP32PulseWindow:
 
         # Divider
         ttk.Separator(self.root, orient="horizontal").pack(fill="x", padx=15, pady=2)
+
+        # Parrot Speaker Selection & Microphone Animatronics Bar
+        parrot_frame = ttk.LabelFrame(self.root, text=" 🦜 Parrot Speaker Selection & Mic Sound Reactivity (esp32_Birds.ino) ", padding=6)
+        parrot_frame.pack(fill="x", padx=15, pady=(2, 4))
+
+        self.parrot_mode_var = tk.StringVar(value="left")
+        self.mic_react_var = tk.BooleanVar(value=True)
+
+        def on_parrot_select(choice):
+            self.parrot_mode_var.set(choice)
+            self.audio_loop.set_active_parrot(choice)
+            for key, btn in p_btns_dict.items():
+                if key == choice:
+                    btn.configure(relief="sunken", bd=2)
+                else:
+                    btn.configure(relief="flat", bd=1)
+
+        def on_toggle_mic_react():
+            en = self.mic_react_var.get()
+            self.audio_loop.set_parrot_sound_reactivity(en)
+
+        def on_test_speech_pulse():
+            conn = self.audio_loop.serial_left or self.audio_loop.serial_conn
+            if conn and conn.is_open:
+                try:
+                    conn.write(b"AI_SPEAKING:1\r\n")
+                    self.root.after(1500, lambda: conn.write(b"AI_SPEAKING:0\r\n"))
+                except Exception:
+                    pass
+            self.update_status("Tested 1.5s speech animatronics pulse on selected parrot(s)")
+
+        p_btns_dict = {}
+        p_choices = [
+            ("👈 Left Parrot", "left", "#0284c7"),
+            ("🦜 Both Parrots", "both", "#d97706"),
+            ("👉 Right Parrot", "right", "#7c3aed"),
+        ]
+        for c_idx, (p_lbl, p_val, p_col) in enumerate(p_choices):
+            p_btn = tk.Button(
+                parrot_frame,
+                text=p_lbl,
+                font=("Segoe UI", 9, "bold"),
+                bg=p_col,
+                fg="#ffffff",
+                relief="sunken" if p_val == "left" else "flat",
+                bd=2 if p_val == "left" else 1,
+                cursor="hand2",
+                padx=8,
+                pady=3,
+                command=lambda pv=p_val: on_parrot_select(pv)
+            )
+            p_btn.grid(row=0, column=c_idx, padx=3, pady=2, sticky="ew")
+            parrot_frame.columnconfigure(c_idx, weight=1)
+            p_btns_dict[p_val] = p_btn
+
+        # Mic Reactivity Checkbox
+        mic_chk = tk.Checkbutton(
+            parrot_frame,
+            text="🎤 Mic Sound Reactivity: ON",
+            variable=self.mic_react_var,
+            font=("Segoe UI", 9, "bold"),
+            bg="#0f172a",
+            fg="#34d399",
+            selectcolor="#1e293b",
+            activebackground="#0f172a",
+            activeforeground="#34d399",
+            cursor="hand2",
+            command=on_toggle_mic_react
+        )
+        mic_chk.grid(row=0, column=3, padx=6, pady=2)
+        parrot_frame.columnconfigure(3, weight=1)
+
+        # Test Pulse Button
+        test_pulse_btn = tk.Button(
+            parrot_frame,
+            text="⚡ Test Speech (1.5s)",
+            font=("Segoe UI", 9, "bold"),
+            bg="#334155",
+            fg="#38bdf8",
+            relief="flat",
+            cursor="hand2",
+            padx=8,
+            pady=3,
+            command=on_test_speech_pulse
+        )
+        test_pulse_btn.grid(row=0, column=4, padx=3, pady=2, sticky="ew")
+        parrot_frame.columnconfigure(4, weight=1)
 
         # Choreography & Light Routines Bar
         routine_frame = ttk.LabelFrame(self.root, text=" 🎭 Waveshare 7\" Touch-LCD Birds Choreography & Light Routines (esp32_Birds.ino) ", padding=6)
@@ -3037,6 +3164,53 @@ class AudioLoop:
     async def execute_bird_routine_async(self, routine: str) -> dict:
         return await asyncio.to_thread(self.execute_bird_routine, routine)
 
+    def set_active_parrot(self, parrot: str) -> dict:
+        parrot = parrot.lower().strip()
+        cmd_str = f"PARROT_SEL:{parrot.upper()}\r\n"
+        conn = self.serial_left or self.serial_conn
+        if conn and conn.is_open:
+            try:
+                conn.write(cmd_str.encode("utf-8"))
+                conn.flush()
+                msg = f"Set speaking parrot to '{parrot.upper()}' on Waveshare 7-inch Touch-LCD ESP32"
+                print(f"\n[ESP32-TOUCH-7] {msg}")
+                if hasattr(self, 'gui_window') and self.gui_window and hasattr(self.gui_window, 'update_status'):
+                    self.gui_window.update_status(f"Active Parrot: {parrot.upper()}")
+                return {"status": "success", "parrot": parrot, "message": msg}
+            except Exception as e:
+                err_msg = f"Error setting active parrot: {e}"
+                print(f"\n[ESP32-TOUCH-7] {err_msg}")
+                return {"status": "error", "message": err_msg}
+        else:
+            sim_msg = f"[Simulated Waveshare 7\" Touch-LCD] Set speaking parrot to '{parrot.upper()}'"
+            print(f"\n{sim_msg}")
+            if hasattr(self, 'gui_window') and self.gui_window and hasattr(self.gui_window, 'update_status'):
+                self.gui_window.update_status(f"Simulated Parrot: {parrot.upper()}")
+            return {"status": "success", "parrot": parrot, "simulated": True, "message": sim_msg}
+
+    async def set_active_parrot_async(self, parrot: str) -> dict:
+        return await asyncio.to_thread(self.set_active_parrot, parrot)
+
+    def set_parrot_sound_reactivity(self, enabled: bool) -> dict:
+        cmd_str = f"MIC_REACT:{'1' if enabled else '0'}\r\n"
+        conn = self.serial_left or self.serial_conn
+        if conn and conn.is_open:
+            try:
+                conn.write(cmd_str.encode("utf-8"))
+                conn.flush()
+                msg = f"Set parrot sound reactivity to {'ENABLED' if enabled else 'DISABLED'}"
+                print(f"\n[ESP32-TOUCH-7] {msg}")
+                return {"status": "success", "enabled": enabled, "message": msg}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+        else:
+            sim_msg = f"[Simulated Waveshare 7\" Touch-LCD] Parrot sound reactivity: {'ENABLED' if enabled else 'DISABLED'}"
+            print(f"\n{sim_msg}")
+            return {"status": "success", "enabled": enabled, "simulated": True, "message": sim_msg}
+
+    async def set_parrot_sound_reactivity_async(self, enabled: bool) -> dict:
+        return await asyncio.to_thread(self.set_parrot_sound_reactivity, enabled)
+
     async def send_tello_command(self, command: str) -> dict:
         return await asyncio.to_thread(self.tello.send_cmd, command)
 
@@ -3407,6 +3581,30 @@ class AudioLoop:
                                         id=fc.id
                                     )
                                 )
+                            elif fc.name == "select_active_parrot":
+                                parrot = fc.args.get("parrot", "left")
+                                result = await self.set_active_parrot_async(parrot)
+                                if hasattr(self, 'gui_window') and self.gui_window and hasattr(self.gui_window, 'parrot_mode_var'):
+                                    self.gui_window.parrot_mode_var.set(parrot.lower())
+                                function_responses.append(
+                                    types.FunctionResponse(
+                                        name=fc.name,
+                                        response=result,
+                                        id=fc.id
+                                    )
+                                )
+                            elif fc.name == "set_parrot_sound_reactivity":
+                                enabled = fc.args.get("enabled", True)
+                                result = await self.set_parrot_sound_reactivity_async(enabled)
+                                if hasattr(self, 'gui_window') and self.gui_window and hasattr(self.gui_window, 'mic_react_var'):
+                                    self.gui_window.mic_react_var.set(bool(enabled))
+                                function_responses.append(
+                                    types.FunctionResponse(
+                                        name=fc.name,
+                                        response=result,
+                                        id=fc.id
+                                    )
+                                )
                             elif fc.name == "pulse_led":
                                 count = fc.args.get("count", 1)
                                 gpio = fc.args.get("gpio", 2)
@@ -3434,6 +3632,15 @@ class AudioLoop:
                 # much more audio than has played yet.
                 while not self.audio_in_queue.empty():
                     self.audio_in_queue.get_nowait()
+                if self.playing_audio:
+                    self.playing_audio = False
+                    conn = self.serial_left or self.serial_conn
+                    if conn and conn.is_open:
+                        try:
+                            conn.write(b"AI_SPEAKING:0\r\n")
+                            conn.flush()
+                        except Exception:
+                            pass
 
     async def play_audio(self):
         output_device_index = self.speaker_idx
@@ -3449,10 +3656,25 @@ class AudioLoop:
         while True:
             if self.audio_in_queue is not None:
                 bytestream = await self.audio_in_queue.get()
-                self.playing_audio = True
+                if not self.playing_audio:
+                    self.playing_audio = True
+                    conn = self.serial_left or self.serial_conn
+                    if conn and conn.is_open:
+                        try:
+                            conn.write(b"AI_SPEAKING:1\r\n")
+                            conn.flush()
+                        except Exception:
+                            pass
                 await asyncio.to_thread(stream.write, bytestream)
                 if self.audio_in_queue.empty():
                     self.playing_audio = False
+                    conn = self.serial_left or self.serial_conn
+                    if conn and conn.is_open:
+                        try:
+                            conn.write(b"AI_SPEAKING:0\r\n")
+                            conn.flush()
+                        except Exception:
+                            pass
 
     async def run(self):
         if self.esp32_left_port:

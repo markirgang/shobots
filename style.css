@@ -1285,3 +1285,159 @@ video {
   transform: scale(1.2);
 }
 
+/* =============================================================================
+   🦜 Parrot AI Speech & Microphone Animatronics Styling
+   ============================================================================= */
+.parrot-speech-card {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.parrot-speech-card.active-speaking {
+  border-color: rgba(56, 189, 248, 0.8) !important;
+  box-shadow: 0 0 25px rgba(56, 189, 248, 0.35), 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+}
+
+.sound-reactive-toggle-wrap .active-react-btn {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid #10b981;
+  color: #34d399;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sound-reactive-toggle-wrap .active-react-btn.disabled-btn {
+  background: rgba(100, 116, 139, 0.2);
+  border: 1px solid #64748b;
+  color: #94a3b8;
+}
+
+.sound-reactive-toggle-wrap .active-react-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+}
+
+/* 3-Option Segmented Parrot Switch */
+.parrot-segmented-switch {
+  display: flex;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.parrot-select-btn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.parrot-select-btn:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.parrot-select-btn.active-left {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+}
+
+.parrot-select-btn.active-both {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #f59e0b;
+  color: #fbbf24;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+}
+
+.parrot-select-btn.active-right {
+  background: rgba(168, 85, 247, 0.2);
+  border-color: #a855f7;
+  color: #c084fc;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);
+}
+
+/* Animatronics Telemetry Feedback Grid */
+.animatronics-telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.5rem;
+}
+
+.telemetry-pill {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.telemetry-pill .telem-icon {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.telemetry-pill .telem-label {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.telemetry-pill .telem-val {
+  color: #f8fafc;
+  font-weight: 700;
+  margin-left: auto;
+  font-family: var(--font-display);
+}
+
+.telemetry-pill.active-anim {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.telemetry-pill.active-anim .telem-val {
+  color: #38bdf8;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+}
+
+.telemetry-pill.active-anim .telem-icon {
+  color: #38bdf8;
+}
+
+.pulse-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #64748b;
+  display: inline-block;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pulse-indicator-dot.active-dot {
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981, 0 0 20px #10b981;
+  animation: audioPulseBlink 0.6s infinite alternate;
+}
+
+@keyframes audioPulseBlink {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  100% { transform: scale(1.3); opacity: 1; }
+}
+

@@ -68,12 +68,15 @@ struct TouchButton {
 // =============================================================================
 // Hardware Configuration & I2C Addresses
 // =============================================================================
+// Hardware Configuration & I2C Addresses
+// =============================================================================
 #define SCREEN_WIDTH         800
 #define SCREEN_HEIGHT        480
 
 #define I2C_SDA_PIN            8
 #define I2C_SCL_PIN            9
 #define TP_INT_PIN             4
+#define MIC_SENSOR_GPIO_PIN    7   // Direct ESP32 GPIO Input for Sound Detector Module
 
 #define GT911_I2C_ADDR      0x5D
 #define MCP23017_ADDR_PRIMARY 0x20 // Primary I/O Expander for Left & Right Birds
@@ -91,6 +94,8 @@ struct TouchButton {
 // MCP23017 Registers
 #define MCP_IODIRA          0x00
 #define MCP_IODIRB          0x01
+#define MCP_GPPUA           0x0C // Pull-up resistor configuration Port A
+#define MCP_GPPUB           0x0D // Pull-up resistor configuration Port B
 #define MCP_GPIOA           0x12
 #define MCP_GPIOB           0x13
 #define MCP_OLATA           0x14
@@ -104,8 +109,24 @@ const int TOTAL_SERVOS = TOTAL_PCA_DRIVERS * SERVOS_PER_DRIVER; // 32 Servos
 const int TOTAL_MCP_PINS = 32; // Up to 32 outputs across primary/secondary MCP23017
 
 // =============================================================================
-// State Tracking Variables
+// State Tracking Variables & Parrot Selection
 // =============================================================================
+enum ParrotSelection {
+  PARROT_LEFT = 0,
+  PARROT_RIGHT = 1,
+  PARROT_BOTH = 2
+};
+
+ParrotSelection selectedParrot = PARROT_LEFT;
+bool micReactivityEnabled = true;
+bool isSpeechActive = false;
+unsigned long lastSoundDetectTime = 0;
+const unsigned long SOUND_SUSTAIN_MS = 450; // Sustain speech motion between word pauses
+unsigned long lastSpeechMouthToggle = 0;
+bool speechMouthOpen = false;
+unsigned long lastSpeechWingToggle = 0;
+bool speechWingFlap = false;
+
 // MCP23017 Pin States (0 = LOW, 1 = HIGH)
 uint16_t mcpPrimaryLatch  = 0x0000; // Port A (bits 0-7) + Port B (bits 8-15)
 uint16_t mcpSecLatch      = 0x0000;
@@ -215,11 +236,19 @@ void initMCP23017() {
   mcpSecPresent     = checkI2CDevice(MCP23017_ADDR_SEC);
 
   if (mcpPrimaryPresent) {
-    // Configure all Port A and Port B pins as OUTPUTs (0x00)
+    // Configure Port A: Bit 4 (GPA4) as INPUT (0x10) for microphone module, rest as OUTPUTs (0x00)
+    // Configure Port B: all pins as OUTPUTs (0x00)
     Wire.beginTransmission(MCP23017_ADDR_PRIMARY);
     Wire.write(MCP_IODIRA);
-    Wire.write(0x00); // Port A all outputs
-    Wire.write(0x00); // Port B all outputs
+    Wire.write(0x10); // Port A: Bit 4 is input, rest outputs
+    Wire.write(0x00); // Port B: all outputs
+    Wire.endTransmission();
+
+    // Enable internal 100k pull-up resistor on GPA4
+    Wire.beginTransmission(MCP23017_ADDR_PRIMARY);
+    Wire.write(MCP_GPPUA);
+    Wire.write(0x10); // Port A Bit 4 pull-up enabled
+    Wire.write(0x00); // Port B
     Wire.endTransmission();
 
     // Set all initial outputs to LOW
@@ -276,6 +305,26 @@ bool getMCPPinState(uint8_t chip, uint8_t pinBit) {
   if (pinBit > 15) return false;
   uint16_t latch = (chip == 0) ? mcpPrimaryLatch : mcpSecLatch;
   return ((latch & (1 << pinBit)) != 0);
+}
+
+bool readMCPPin(uint8_t chip, uint8_t pinBit) {
+  if (pinBit > 15) return false;
+  uint8_t addr = (chip == 0) ? MCP23017_ADDR_PRIMARY : MCP23017_ADDR_SEC;
+  bool present = (chip == 0) ? mcpPrimaryPresent : mcpSecPresent;
+  if (!present) return false;
+
+  uint8_t reg = (pinBit < 8) ? MCP_GPIOA : MCP_GPIOB;
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  if (Wire.endTransmission() != 0) return false;
+
+  Wire.requestFrom(addr, (uint8_t)1);
+  if (Wire.available() >= 1) {
+    uint8_t val = Wire.read();
+    uint8_t bitIdx = pinBit % 8;
+    return ((val & (1 << bitIdx)) != 0);
+  }
+  return false;
 }
 
 // --- PCA9685 Servo Driver ---
@@ -539,6 +588,151 @@ void updateRoutines() {
 }
 
 // =============================================================================
+// Real-Time Speech Motion & Animatronics Engine (Microphone & AI Voice Sync)
+// =============================================================================
+void updateSpeechMotionEngine() {
+  if (!micReactivityEnabled) return;
+  if (currentRoutine != "idle") return; // Manual routines have priority
+
+  unsigned long now = millis();
+
+  // 1. Read Hardware Microphone Sound Detector
+  // KY-037/KY-038/LM393 sound detection modules pull digital OUT (DO) LOW on sound detection
+  bool gpioTrigger = (digitalRead(MIC_SENSOR_GPIO_PIN) == LOW);
+  bool mcpTrigger  = (mcpPrimaryPresent && !readMCPPin(0, 4)); // GPA4 (Bit 4) triggered LOW
+
+  if (gpioTrigger || mcpTrigger) {
+    lastSoundDetectTime = now;
+  }
+
+  // 2. Active Speaking / Sound Detection Window
+  if (now - lastSoundDetectTime < SOUND_SUSTAIN_MS) {
+    isSpeechActive = true;
+    float t = now * 0.003f;
+
+    // --- A. Dynamic Mouth Up/Down Movement ---
+    if (now - lastSpeechMouthToggle > 120) {
+      speechMouthOpen = !speechMouthOpen;
+      lastSpeechMouthToggle = now;
+
+      // Selected parrot(s) mouth moves up and down
+      if (selectedParrot == PARROT_LEFT || selectedParrot == PARROT_BOTH) {
+        writeMCPPin(0, 0, speechMouthOpen);  // L Parrot Mouth (Bit 0)
+      } else {
+        writeMCPPin(0, 0, false);
+      }
+
+      if (selectedParrot == PARROT_RIGHT || selectedParrot == PARROT_BOTH) {
+        writeMCPPin(0, 11, speechMouthOpen); // R Parrot Mouth (Bit 11)
+      } else {
+        writeMCPPin(0, 11, false);
+      }
+
+      mouthOpenPercent = speechMouthOpen ? 90 : 15;
+    }
+
+    // --- B. Wing Flapping Movement ---
+    if (now - lastSpeechWingToggle > 180) {
+      speechWingFlap = !speechWingFlap;
+      lastSpeechWingToggle = now;
+
+      if (selectedParrot == PARROT_LEFT || selectedParrot == PARROT_BOTH) {
+        writeMCPPin(0, 2, speechWingFlap);  // L Parrot Body/Wings (Bit 2)
+      } else {
+        writeMCPPin(0, 2, false);
+      }
+
+      if (selectedParrot == PARROT_RIGHT || selectedParrot == PARROT_BOTH) {
+        writeMCPPin(0, 13, speechWingFlap); // R Parrot Body/Wings (Bit 13)
+      } else {
+        writeMCPPin(0, 13, false);
+      }
+    }
+
+    // --- C. 3 Base Servos of Selected Parrot (Gentle Slow-to-Medium Speed) ---
+    // Channel 0: Up/Down Tilt (78° to 102°)
+    // Channel 1: Right/Left Side-to-Side Sway (74° to 106°)
+    // Channel 2: Turn / Rotate (70° to 110°)
+    float lUpAngle    = 90.0f + sin(t * 3.5f) * 12.0f;
+    float lSideAngle  = 90.0f + cos(t * 2.8f) * 16.0f;
+    float lTurnAngle  = 90.0f + sin(t * 2.0f) * 20.0f;
+
+    float rUpAngle    = 90.0f + sin(t * 3.5f + 1.4f) * 12.0f;
+    float rSideAngle  = 90.0f + cos(t * 2.8f + 1.4f) * 16.0f;
+    float rTurnAngle  = 90.0f + sin(t * 2.0f + 1.4f) * 20.0f;
+
+    if (selectedParrot == PARROT_LEFT || selectedParrot == PARROT_BOTH) {
+      setDriverServoAngle(0, 0, lUpAngle, 100);   // Left Parrot Up/Dn
+      setDriverServoAngle(0, 1, lSideAngle, 100); // Left Parrot Right/Left
+      setDriverServoAngle(0, 2, lTurnAngle, 100); // Left Parrot Rotate
+    }
+
+    if (selectedParrot == PARROT_RIGHT || selectedParrot == PARROT_BOTH) {
+      setDriverServoAngle(1, 0, rUpAngle, 100);   // Right Parrot Up/Dn
+      setDriverServoAngle(1, 1, rSideAngle, 100); // Right Parrot Right/Left
+      setDriverServoAngle(1, 2, rTurnAngle, 100); // Right Parrot Rotate
+    }
+
+    // --- D. Spotlight Movement & Lighting ---
+    if (selectedParrot == PARROT_LEFT || selectedParrot == PARROT_BOTH) {
+      float lSpotUp  = 90.0f + sin(t * 1.8f) * 16.0f;
+      float lSpotRot = 90.0f + cos(t * 1.4f) * 22.0f;
+      setDriverServoAngle(0, 3, lSpotUp, 120);  // Left Spotlight Up/Dn
+      setDriverServoAngle(0, 4, lSpotRot, 120); // Left Spotlight Rotate
+      writeMCPPin(0, 3, true);                  // Left Spotlight LED ON
+    } else {
+      writeMCPPin(0, 3, false);
+    }
+
+    if (selectedParrot == PARROT_RIGHT || selectedParrot == PARROT_BOTH) {
+      float rSpotUp  = 90.0f + cos(t * 1.8f) * 16.0f;
+      float rSpotRot = 90.0f + sin(t * 1.4f) * 22.0f;
+      setDriverServoAngle(1, 3, rSpotUp, 120);  // Right Spotlight Up/Dn
+      setDriverServoAngle(1, 4, rSpotRot, 120); // Right Spotlight Rotate
+      writeMCPPin(0, 14, true);                 // Right Spotlight LED ON
+    } else {
+      writeMCPPin(0, 14, false);
+    }
+
+    // --- E. Center Turntable (Slow Right and Left Rotation) ---
+    float ttAngle = 90.0f + sin(t * 1.2f) * 35.0f; // 55° to 125°
+    setDriverServoAngle(1, 5, ttAngle, 150);        // Center Turntable Rotate
+
+  } else if (isSpeechActive) {
+    // Silence detected -> Return to neutral rest positions
+    isSpeechActive = false;
+
+    // Reset base servos to neutral 90
+    if (selectedParrot == PARROT_LEFT || selectedParrot == PARROT_BOTH) {
+      setDriverServoAngle(0, 0, 90.0f, 250);
+      setDriverServoAngle(0, 1, 90.0f, 250);
+      setDriverServoAngle(0, 2, 90.0f, 250);
+      writeMCPPin(0, 0, false); // Mouth OFF
+      writeMCPPin(0, 2, false); // Wings OFF
+      writeMCPPin(0, 3, false); // Light OFF
+    }
+
+    if (selectedParrot == PARROT_RIGHT || selectedParrot == PARROT_BOTH) {
+      setDriverServoAngle(1, 0, 90.0f, 250);
+      setDriverServoAngle(1, 1, 90.0f, 250);
+      setDriverServoAngle(1, 2, 90.0f, 250);
+      writeMCPPin(0, 11, false); // Mouth OFF
+      writeMCPPin(0, 13, false); // Wings OFF
+      writeMCPPin(0, 14, false); // Light OFF
+    }
+
+    // Reset spotlights and turntable to neutral 90
+    setDriverServoAngle(0, 3, 90.0f, 250);
+    setDriverServoAngle(0, 4, 90.0f, 250);
+    setDriverServoAngle(1, 3, 90.0f, 250);
+    setDriverServoAngle(1, 4, 90.0f, 250);
+    setDriverServoAngle(1, 5, 90.0f, 250);
+
+    mouthOpenPercent = 0;
+  }
+}
+
+// =============================================================================
 // GT911 Capacitive Touchscreen Driver
 // =============================================================================
 void initTouchController() {
@@ -614,6 +808,12 @@ const TouchButton DASHBOARD_BTNS[] = {
   {"L Chirp",      115, 262, 90, 42, "output", "left", 15},
   {"Ctr Bird Move", 20, 310, 185, 42, "output", "left", 16},
 
+  // Parrot Selection & Mic Sound Reactivity (Center Top Bar)
+  {"👈 L PARROT",  215,  70, 115, 38, "parrot_sel", "left", 0},
+  {"🦜 BOTH",      335,  70,  95, 38, "parrot_sel", "both", 0},
+  {"👉 R PARROT",  435,  70, 115, 38, "parrot_sel", "right", 0},
+  {"🎤 MIC REACT", 265, 115, 235, 38, "mic_toggle", "toggle", 0},
+
   // Right Bird Output Toggles (Column 5 & 6, Right Side of 7" Screen)
   {"R Mouth",      595,  70, 90, 42, "output", "right", 0},
   {"R Eyes",       690,  70, 90, 42, "output", "right", 1},
@@ -653,6 +853,24 @@ void handleTouchAction(int btnIdx) {
     startRoutine(btn.board);
     Serial.print("[Touch 7\"] Started Routine: ");
     Serial.println(btn.board);
+  } else if (String(btn.type) == "parrot_sel") {
+    if (String(btn.board) == "left") {
+      selectedParrot = PARROT_LEFT;
+      statusMessage = "Speaker Parrot: LEFT";
+    } else if (String(btn.board) == "right") {
+      selectedParrot = PARROT_RIGHT;
+      statusMessage = "Speaker Parrot: RIGHT";
+    } else if (String(btn.board) == "both") {
+      selectedParrot = PARROT_BOTH;
+      statusMessage = "Speaker Parrot: BOTH";
+    }
+    Serial.print("[Touch 7\"] Parrot Selected: ");
+    Serial.println(btn.board);
+  } else if (String(btn.type) == "mic_toggle") {
+    micReactivityEnabled = !micReactivityEnabled;
+    statusMessage = micReactivityEnabled ? "Mic React: ENABLED" : "Mic React: DISABLED";
+    Serial.print("[Touch 7\"] Mic Sound Reactivity: ");
+    Serial.println(micReactivityEnabled ? "ENABLED" : "DISABLED");
   }
 }
 
@@ -737,7 +955,13 @@ void printLiveTelemetry() {
   if (millis() - lastTelemetryBroadcast < 1000) return;
   lastTelemetryBroadcast = millis();
 
-  Serial.print("[7\" Touch-LCD Telemetry] MCP23017: 0x");
+  Serial.print("[7\" Touch-LCD Telemetry] Parrot: ");
+  Serial.print(selectedParrot == PARROT_LEFT ? "LEFT" : (selectedParrot == PARROT_RIGHT ? "RIGHT" : "BOTH"));
+  Serial.print(" | Mic React: ");
+  Serial.print(micReactivityEnabled ? "ON" : "OFF");
+  Serial.print(" | Speech: ");
+  Serial.print(isSpeechActive ? "TALKING" : "IDLE");
+  Serial.print(" | MCP: 0x");
   Serial.print(mcpPrimaryLatch, HEX);
   Serial.print(" | Servos L[0..7]: (");
   for (int i = 0; i < 8; i++) {
@@ -761,6 +985,68 @@ void printLiveTelemetry() {
 void parseCommand(String cmd) {
   cmd.trim();
   if (cmd.length() == 0) return;
+
+  // --- 0. PARROT SELECTION & MIC REACTIVITY Commands ---
+  // Formats: "PARROT_SEL:<LEFT|RIGHT|BOTH>", "PARROT:<LEFT|RIGHT|BOTH>", "PARROT:L", "PARROT:R", "PARROT:BOTH"
+  if (cmd.startsWith("PARROT_SEL:") || cmd.startsWith("parrot_sel:") || cmd.startsWith("PARROT:") || cmd.startsWith("parrot:")) {
+    int colonIdx = cmd.indexOf(':');
+    String pChoice = cmd.substring(colonIdx + 1);
+    pChoice.toUpperCase();
+    pChoice.trim();
+    if (pChoice == "LEFT" || pChoice == "L") {
+      selectedParrot = PARROT_LEFT;
+      statusMessage = "Speaker Parrot: LEFT";
+      Serial.println("[ESP32-Touch-7] Speaker Parrot set to LEFT");
+    } else if (pChoice == "RIGHT" || pChoice == "R") {
+      selectedParrot = PARROT_RIGHT;
+      statusMessage = "Speaker Parrot: RIGHT";
+      Serial.println("[ESP32-Touch-7] Speaker Parrot set to RIGHT");
+    } else if (pChoice == "BOTH" || pChoice == "B" || pChoice == "ALL") {
+      selectedParrot = PARROT_BOTH;
+      statusMessage = "Speaker Parrot: BOTH";
+      Serial.println("[ESP32-Touch-7] Speaker Parrot set to BOTH");
+    }
+    return;
+  }
+
+  // "MIC_REACT:<1|0|ON|OFF>", "MIC:<1|0|ON|OFF>"
+  if (cmd.startsWith("MIC_REACT:") || cmd.startsWith("mic_react:") || cmd.startsWith("MIC:") || cmd.startsWith("mic:")) {
+    int colonIdx = cmd.indexOf(':');
+    String valStr = cmd.substring(colonIdx + 1);
+    valStr.toUpperCase();
+    valStr.trim();
+    micReactivityEnabled = (valStr == "1" || valStr == "ON" || valStr == "TRUE" || valStr == "ENABLE");
+    statusMessage = micReactivityEnabled ? "Mic React: ENABLED" : "Mic React: DISABLED";
+    Serial.println("[ESP32-Touch-7] Mic Reactivity set to: " + String(micReactivityEnabled ? "ON" : "OFF"));
+    return;
+  }
+
+  // "AI_SPEAKING:<1|0>", "TALK:<1|0>", "TALKING:<1|0>"
+  if (cmd.startsWith("AI_SPEAKING:") || cmd.startsWith("ai_speaking:") ||
+      cmd.startsWith("TALK:") || cmd.startsWith("talk:") ||
+      cmd.startsWith("TALKING:") || cmd.startsWith("talking:")) {
+    int colonIdx = cmd.indexOf(':');
+    String stateStr = cmd.substring(colonIdx + 1);
+    stateStr.toUpperCase();
+    stateStr.trim();
+    if (stateStr == "1" || stateStr == "ON" || stateStr == "TRUE" || stateStr == "START") {
+      lastSoundDetectTime = millis();
+      isSpeechActive = true;
+      Serial.println("[ESP32-Touch-7] AI Speaking Animatronics -> ACTIVE");
+    } else {
+      lastSoundDetectTime = 0; // Trigger silence transition in updateSpeechMotionEngine
+      Serial.println("[ESP32-Touch-7] AI Speaking Animatronics -> REST");
+    }
+    return;
+  }
+
+  // "MIC_TRIGGER" / "SOUND_DETECT" (Direct pulse trigger for testing)
+  if (cmd.equalsIgnoreCase("MIC_TRIGGER") || cmd.equalsIgnoreCase("SOUND_DETECT") || cmd.equalsIgnoreCase("TALK")) {
+    lastSoundDetectTime = millis();
+    isSpeechActive = true;
+    Serial.println("[ESP32-Touch-7] Triggered sound pulse event");
+    return;
+  }
 
   // --- 1. SERVO Commands ---
   // Formats:
@@ -911,6 +1197,9 @@ void setup() {
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000); // 400kHz Fast Mode
 
+  // Initialize Direct GPIO Mic Sound Sensor Input Pin
+  pinMode(MIC_SENSOR_GPIO_PIN, INPUT_PULLUP);
+
   // Initialize Servo default angles to 90 degrees
   for (int i = 0; i < TOTAL_SERVOS; i++) {
     servoCurrentAngles[i] = 90.0f;
@@ -942,6 +1231,10 @@ void setup() {
   Serial.print("PCA9685 Right (0x41): ");
   Serial.println(pcaRightPresent ? "CONNECTED" : "NOT DETECTED");
   Serial.println("GT911 Capacitive Touch (0x5D): READY");
+  Serial.println("Mic Sound Detection Sensor: GPIO 7 & MCP GPA4 READY");
+  Serial.print("Active Speaker Parrot: ");
+  Serial.println(selectedParrot == PARROT_LEFT ? "LEFT" : (selectedParrot == PARROT_RIGHT ? "RIGHT" : "BOTH"));
+  Serial.println("Speech Animatronics Engine: READY (Mouth/Wings/3 Servos/Spotlight/Turntable)");
   Serial.println("Animations Engine: READY (30 FPS)");
   Serial.println("==========================================================");
 }
@@ -964,18 +1257,21 @@ void loop() {
   // 2. Process Capacitive Touchscreen Interactions
   processTouchInput();
 
-  // 3. Update Trajectory & Motion Interpolation Engine (50Hz)
+  // 3. Update Real-Time Speech Motion & Animatronics Engine (Mouth, Wings, 3 Servos, Spotlights, Turntable)
+  updateSpeechMotionEngine();
+
+  // 4. Update Trajectory & Motion Interpolation Engine (50Hz)
   updateServoTrajectoryEngine();
 
-  // 4. Update Non-blocking Output Pulse Timers
+  // 5. Update Non-blocking Output Pulse Timers
   updatePulseTimers();
 
-  // 5. Update Choreography & Routine State Machine
+  // 6. Update Choreography & Routine State Machine
   updateRoutines();
 
-  // 6. Update Dynamic Animations (Mascot Eyes, Beak, Spectrum, Beams)
+  // 7. Update Dynamic Animations (Mascot Eyes, Beak, Spectrum, Beams)
   updateAnimations();
 
-  // 7. Output Live Telemetry Stream
+  // 8. Output Live Telemetry Stream
   printLiveTelemetry();
 }

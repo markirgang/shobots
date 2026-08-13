@@ -460,11 +460,12 @@ if (!systemInstruction.value.trim()) {
    - When estimating time or counting seconds, use the number of incoming frames as your clock.
 
  3. HARDWARE CONTROL:
-   - ESP32 PCA9685 Servos: You MUST use the `set_servo_angle` tool when the user asks verbally or visually to move, position, turn, or adjust any of the servos on the Left or Right ESP32 (e.g. Left/Right Parrot Up/Dn, Right Spotlight Rotate, Center Bird Up/Dn, Center Turntable Rotate, etc.) to a specific degree angle (0 to 180 degrees).
-   - ESP32 LED: You MUST use the `set_led_state` tool to turn the LED on or off. If the user asks you to pulse, blink, or flash the LED a certain number of times (e.g., to match the count of fingers you see in the frame), you MUST use the `pulse_led` tool with the appropriate count.
-   - Tello Drone: You MUST use the `send_tello_command` tool to control the Tello drone when the user asks you to perform actions like takeoff, landing, moving, flipping, or rotating.
-   - Leviton Lights: You MUST use the `set_leviton_light_state` tool when the user asks you to turn smart home lights on, off, or change their brightness level.
-   - eWeLink Devices: You MUST use the `set_ewelink_device_state` tool when the user asks you to turn eWeLink or Sonoff devices (plugs, switches, fans, etc.) on or off.
+   - ESP32 PCA9685 Servos: You MUST use the set_servo_angle tool when the user asks verbally or visually to move, position, turn, or adjust any of the servos on the Left or Right ESP32 (e.g. Left/Right Parrot Up/Dn, Right Spotlight Rotate, Center Bird Up/Dn, Center Turntable Rotate, etc.) to a specific degree angle (0 to 180 degrees).
+   - Parrot Speaker Selection & Reactivity: You MUST use the select_active_parrot tool when the user asks to switch which parrot speaks/animates ('left', 'right', or 'both'), and set_parrot_sound_reactivity to toggle auto-sound reactivity.
+   - ESP32 LED: You MUST use the set_led_state tool to turn the LED on or off. If the user asks you to pulse, blink, or flash the LED a certain number of times (e.g., to match the count of fingers you see in the frame), you MUST use the pulse_led tool with the appropriate count.
+   - Tello Drone: You MUST use the send_tello_command tool to control the Tello drone when the user asks you to perform actions like takeoff, landing, moving, flipping, or rotating.
+   - Leviton Lights: You MUST use the set_leviton_light_state tool when the user asks you to turn smart home lights on, off, or change their brightness level.
+   - eWeLink Devices: You MUST use the set_ewelink_device_state tool when the user asks you to turn eWeLink or Sonoff devices (plugs, switches, fans, etc.) on or off.
 
 If a physical device is not connected or configured, the application will automatically run the command in simulated/fallback mode, so always call the tools anyway. Never tell the user that you cannot control the hardware, as you are fully equipped with tools to do so.`;
 }
@@ -634,6 +635,35 @@ async function connectSession() {
                   }
                 },
                 {
+                  name: "select_active_parrot",
+                  description: "Selects which parrot ('left', 'right', or 'both') moves its mouth, flaps its wings, sways its 3 base servos, and activates its spotlight when the AI/LLM speaks.",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      parrot: {
+                        type: "STRING",
+                        enum: ["left", "right", "both"],
+                        description: "The parrot to select: 'left', 'right', or 'both'."
+                      }
+                    },
+                    required: ["parrot"]
+                  }
+                },
+                {
+                  name: "set_parrot_sound_reactivity",
+                  description: "Enables or disables automatic microphone and AI voice reactivity for the parrots (mouth movement, wing flapping, 3-axis base servo movement, spotlight tracking, and turntable rotation).",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      enabled: {
+                        type: "BOOLEAN",
+                        description: "True to enable auto-reactivity, false to disable."
+                      }
+                    },
+                    required: ["enabled"]
+                  }
+                },
+                {
                   name: "control_hexapod",
                   description: "Controls the 6-leg Hexapod robot driven by the ESP-32-Touch-LCD controller (over Bluetooth 'hexapod-touch-lcd' or USB serial). Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message'. Can also adjust leg joints or display custom text on the onboard Touch LCD.",
                   parameters: {
@@ -797,6 +827,16 @@ async function connectSession() {
             writeSerialCommand(`ROUTINE:${routine}\n`);
             result = { status: "success", routine: routine, device: "Waveshare-7-Touch-LCD" };
             appendSystemMessage(`[Waveshare 7" Touch-LCD] Triggered Routine: ${routine.toUpperCase()}`);
+          } else if (fc.name === "select_active_parrot") {
+            const parrot = (fc.args.parrot || "left").toLowerCase();
+            setActiveParrot(parrot);
+            result = { status: "success", parrot: parrot };
+            appendSystemMessage(`[Parrot Animatronics] Selected Active Parrot: ${parrot.toUpperCase()}`);
+          } else if (fc.name === "set_parrot_sound_reactivity") {
+            const enabled = Boolean(fc.args.enabled);
+            setSoundReactivity(enabled);
+            result = { status: "success", enabled: enabled };
+            appendSystemMessage(`[Parrot Animatronics] Set Sound Reactivity to ${enabled ? "ENABLED" : "DISABLED"}`);
           } else if (fc.name === "control_hexapod") {
             const action = fc.args.action || "stand";
             const legName = fc.args.leg_name;
@@ -975,6 +1015,168 @@ function handleAssistantText(text) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+// =============================================================================
+// 🦜 Parrot AI Speech & Microphone Sound Animatronics Engine
+// =============================================================================
+let activeSpeakerParrot = 'left'; // 'left', 'right', 'both'
+let soundReactivityEnabled = true;
+let isAssistantSpeaking = false;
+let speechAnimTimer = null;
+let speechAnimStep = 0;
+
+function setActiveParrot(choice) {
+  choice = (choice || 'left').toLowerCase();
+  if (choice !== 'left' && choice !== 'right' && choice !== 'both') choice = 'left';
+  activeSpeakerParrot = choice;
+
+  const btnL = document.getElementById('btn-select-left-parrot');
+  const btnB = document.getElementById('btn-select-both-parrots');
+  const btnR = document.getElementById('btn-select-right-parrot');
+
+  if (btnL && btnB && btnR) {
+    btnL.className = 'parrot-select-btn' + (choice === 'left' ? ' active-left' : '');
+    btnB.className = 'parrot-select-btn' + (choice === 'both' ? ' active-both' : '');
+    btnR.className = 'parrot-select-btn' + (choice === 'right' ? ' active-right' : '');
+  }
+
+  writeSerialCommand(`PARROT_SEL:${choice.toUpperCase()}\n`);
+}
+
+function setSoundReactivity(enabled) {
+  soundReactivityEnabled = Boolean(enabled);
+  const toggleBtn = document.getElementById('toggle-sound-reactivity');
+  const label = document.getElementById('sound-react-btn-label');
+  if (toggleBtn && label) {
+    if (soundReactivityEnabled) {
+      toggleBtn.className = 'text-btn btn-small active-react-btn';
+      label.textContent = 'Auto-React: ON';
+    } else {
+      toggleBtn.className = 'text-btn btn-small active-react-btn disabled-btn';
+      label.textContent = 'Auto-React: OFF';
+    }
+  }
+  writeSerialCommand(`MIC_REACT:${soundReactivityEnabled ? '1' : '0'}\n`);
+}
+
+function startSpeechAnimatronicsVisualizer() {
+  const card = document.querySelector('.parrot-speech-card');
+  if (card) card.classList.add('active-speaking');
+
+  const dot = document.getElementById('dot-mic-active');
+  const valMic = document.getElementById('val-mic-status');
+  if (dot) dot.classList.add('active-dot');
+  if (valMic) valMic.textContent = 'SPEAKING';
+
+  if (speechAnimTimer) clearInterval(speechAnimTimer);
+  speechAnimStep = 0;
+
+  speechAnimTimer = setInterval(() => {
+    speechAnimStep++;
+    const mouthOpen = (speechAnimStep % 2 === 0);
+    const wingFlap = (speechAnimStep % 3 === 0);
+
+    const pillMouth = document.getElementById('telem-mouth-status');
+    const valMouth = document.getElementById('val-mouth-status');
+    if (pillMouth && valMouth) {
+      pillMouth.className = 'telemetry-pill' + (mouthOpen ? ' active-anim' : '');
+      valMouth.textContent = mouthOpen ? 'OPEN (Flapping)' : 'CLOSED';
+    }
+
+    const pillWings = document.getElementById('telem-wing-status');
+    const valWings = document.getElementById('val-wing-status');
+    if (pillWings && valWings) {
+      pillWings.className = 'telemetry-pill' + (wingFlap ? ' active-anim' : '');
+      valWings.textContent = wingFlap ? 'FLAPPING' : 'REST';
+    }
+
+    const pillServos = document.getElementById('telem-servos-status');
+    const valServos = document.getElementById('val-servos-status');
+    if (pillServos && valServos) {
+      pillServos.className = 'telemetry-pill active-anim';
+      const angles = [
+        Math.round(90 + Math.sin(speechAnimStep * 0.4) * 12),
+        Math.round(90 + Math.cos(speechAnimStep * 0.3) * 16),
+        Math.round(90 + Math.sin(speechAnimStep * 0.2) * 20)
+      ];
+      valServos.textContent = `${angles[0]}° / ${angles[1]}° / ${angles[2]}°`;
+    }
+
+    const pillSpot = document.getElementById('telem-spotlight-status');
+    const valSpot = document.getElementById('val-spotlight-status');
+    if (pillSpot && valSpot) {
+      pillSpot.className = 'telemetry-pill active-anim';
+      valSpot.textContent = 'TRACKING (ON)';
+    }
+
+    const pillTT = document.getElementById('telem-turntable-status');
+    const valTT = document.getElementById('val-turntable-status');
+    if (pillTT && valTT) {
+      pillTT.className = 'telemetry-pill active-anim';
+      const ttDeg = Math.round(90 + Math.sin(speechAnimStep * 0.15) * 35);
+      valTT.textContent = `${ttDeg}° Rotating`;
+    }
+  }, 120);
+}
+
+function stopSpeechAnimatronicsVisualizer() {
+  if (speechAnimTimer) {
+    clearInterval(speechAnimTimer);
+    speechAnimTimer = null;
+  }
+
+  const card = document.querySelector('.parrot-speech-card');
+  if (card) card.classList.remove('active-speaking');
+
+  const dot = document.getElementById('dot-mic-active');
+  const valMic = document.getElementById('val-mic-status');
+  if (dot) dot.classList.remove('active-dot');
+  if (valMic) valMic.textContent = 'IDLE';
+
+  const pillMouth = document.getElementById('telem-mouth-status');
+  const valMouth = document.getElementById('val-mouth-status');
+  if (pillMouth && valMouth) {
+    pillMouth.className = 'telemetry-pill';
+    valMouth.textContent = 'Rest';
+  }
+
+  const pillWings = document.getElementById('telem-wing-status');
+  const valWings = document.getElementById('val-wing-status');
+  if (pillWings && valWings) {
+    pillWings.className = 'telemetry-pill';
+    valWings.textContent = 'Rest';
+  }
+
+  const pillServos = document.getElementById('telem-servos-status');
+  const valServos = document.getElementById('val-servos-status');
+  if (pillServos && valServos) {
+    pillServos.className = 'telemetry-pill';
+    valServos.textContent = '90° Rest';
+  }
+
+  const pillSpot = document.getElementById('telem-spotlight-status');
+  const valSpot = document.getElementById('val-spotlight-status');
+  if (pillSpot && valSpot) {
+    pillSpot.className = 'telemetry-pill';
+    valSpot.textContent = 'Rest';
+  }
+
+  const pillTT = document.getElementById('telem-turntable-status');
+  const valTT = document.getElementById('val-turntable-status');
+  if (pillTT && valTT) {
+    pillTT.className = 'telemetry-pill';
+    valTT.textContent = '90° Rest';
+  }
+}
+
+function triggerTestSpeechPulse(durationMs = 1500) {
+  writeSerialCommand('AI_SPEAKING:1\n');
+  startSpeechAnimatronicsVisualizer();
+  setTimeout(() => {
+    writeSerialCommand('AI_SPEAKING:0\n');
+    stopSpeechAnimatronicsVisualizer();
+  }, durationMs);
+}
+
 // Play Gemini Voice Output
 function handleAssistantAudio(base64Data) {
   if (!audioContext) return;
@@ -1009,11 +1211,23 @@ function handleAssistantAudio(base64Data) {
     
     source.start(nextPlaybackTime);
     activeSources.push(source);
+
+    // Trigger AI speech animatronics on ESP32 & UI
+    if (!isAssistantSpeaking && soundReactivityEnabled) {
+      isAssistantSpeaking = true;
+      writeSerialCommand('AI_SPEAKING:1\n');
+      startSpeechAnimatronicsVisualizer();
+    }
     
     source.onended = () => {
       const idx = activeSources.indexOf(source);
       if (idx !== -1) {
         activeSources.splice(idx, 1);
+      }
+      if (activeSources.length === 0 && isAssistantSpeaking) {
+        isAssistantSpeaking = false;
+        writeSerialCommand('AI_SPEAKING:0\n');
+        stopSpeechAnimatronicsVisualizer();
       }
     };
     
@@ -1036,6 +1250,12 @@ function handleInterruption() {
     }
   });
   activeSources = [];
+
+  if (isAssistantSpeaking) {
+    isAssistantSpeaking = false;
+    writeSerialCommand('AI_SPEAKING:0\n');
+    stopSpeechAnimatronicsVisualizer();
+  }
 }
 
 // Disconnect Session
@@ -1566,5 +1786,49 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+
+  // Parrot Speaker Selection Switch Handlers
+  const btnSelectLeft = document.getElementById('btn-select-left-parrot');
+  const btnSelectBoth = document.getElementById('btn-select-both-parrots');
+  const btnSelectRight = document.getElementById('btn-select-right-parrot');
+
+  if (btnSelectLeft) {
+    btnSelectLeft.addEventListener('click', () => {
+      setActiveParrot('left');
+      appendSystemMessage('[Parrot Switch] Active Speaker: LEFT Parrot');
+    });
+  }
+
+  if (btnSelectBoth) {
+    btnSelectBoth.addEventListener('click', () => {
+      setActiveParrot('both');
+      appendSystemMessage('[Parrot Switch] Active Speaker: BOTH Parrots');
+    });
+  }
+
+  if (btnSelectRight) {
+    btnSelectRight.addEventListener('click', () => {
+      setActiveParrot('right');
+      appendSystemMessage('[Parrot Switch] Active Speaker: RIGHT Parrot');
+    });
+  }
+
+  // Sound Reactivity Mode Toggle Handler
+  const toggleSoundReactBtn = document.getElementById('toggle-sound-reactivity');
+  if (toggleSoundReactBtn) {
+    toggleSoundReactBtn.addEventListener('click', () => {
+      setSoundReactivity(!soundReactivityEnabled);
+      appendSystemMessage(`[Parrot Animatronics] Auto-Mouth & Motion Reactivity: ${soundReactivityEnabled ? 'ON' : 'OFF'}`);
+    });
+  }
+
+  // Test Speech Pulse Button Handler
+  const testSpeechBtn = document.getElementById('btn-test-speech-pulse');
+  if (testSpeechBtn) {
+    testSpeechBtn.addEventListener('click', () => {
+      appendSystemMessage('[Test Pulse] Running 1.5s speech animatronics pulse on selected parrot(s)...');
+      triggerTestSpeechPulse(1500);
+    });
+  }
 });
 
