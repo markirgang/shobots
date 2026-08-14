@@ -152,6 +152,15 @@ unsigned long lastEyeBlink = 0;
 bool eyeBlinkState = false;
 String lcdStatusMessage = "Hexapod 7-Inch System Online";
 
+// Speech Reactivity & AI Audio Stream State
+bool speechReactEnabled = true;
+bool isSpeechActive = false;
+unsigned long lastSpeechTime = 0;
+const unsigned long SPEECH_SUSTAIN_MS = 500;
+unsigned long lastSpeechEyeToggle = 0;
+bool speechEyeState = false;
+unsigned long lastSpeechSwayTime = 0;
+
 // Touch State
 bool isTouched = false;
 int touchX = 0;
@@ -435,6 +444,59 @@ void updateGaitEngine() {
 }
 
 // =============================================================================
+// Real-Time Speech Motion & Eye Animation Engine
+// =============================================================================
+void updateSpeechEngine() {
+  unsigned long now = millis();
+
+  // Natural idle eye blinking
+  if (now - lastEyeBlink > 3500) {
+    eyeBlinkState = true;
+    if (now - lastEyeBlink > 3700) {
+      eyeBlinkState = false;
+      lastEyeBlink = now;
+    }
+  }
+
+  if (!speechReactEnabled) return;
+
+  // Active speaking window
+  if (isSpeechActive && (now - lastSpeechTime < SPEECH_SUSTAIN_MS || lastSpeechTime > 0)) {
+    // Dynamic rapid eye blinking during speech
+    if (now - lastSpeechEyeToggle > 160) {
+      speechEyeState = !speechEyeState;
+      eyeBlinkState = speechEyeState;
+      lastSpeechEyeToggle = now;
+    }
+
+    // Expressive body breathing sway if hexapod is in idle/stand posture
+    if (currentGait == "idle" && (now - lastSpeechSwayTime > 80)) {
+      lastSpeechSwayTime = now;
+      float t = now * 0.004f;
+      float swayAngle = sin(t * 2.2f) * 10.0f; // ±10° pitch/height sway
+      float coxaSway  = cos(t * 1.5f) * 8.0f;  // ±8° yaw sway
+
+      float targets[TOTAL_SERVOS];
+      memcpy(targets, targetAngles, sizeof(targets));
+
+      for (int l = 0; l < 6; l++) {
+        targets[getServoIndex(l, 0)] = 90.0f + ((l < 3) ? coxaSway : -coxaSway);
+        targets[getServoIndex(l, 1)] = 90.0f + swayAngle;
+        targets[getServoIndex(l, 2)] = 90.0f - swayAngle;
+      }
+      setTargetAngles(targets, 90);
+    }
+  } else if (isSpeechActive) {
+    // Speech ended -> restore normal stand posture
+    isSpeechActive = false;
+    if (currentGait == "idle") {
+      applyStandPosture(250);
+      lcdStatusMessage = "Hexapod Standing / Ready";
+    }
+  }
+}
+
+// =============================================================================
 // Capacitive Touch Driver (GT911 & CST816S Multi-Touch Controller)
 // =============================================================================
 void initTouchController() {
@@ -556,9 +618,12 @@ const TouchButton TOUCH_BTNS[] = {
   {"TURN LEFT",  370, 250, 150, 60, "turn_left",   0x0284},
   {"TURN RIGHT", 370, 325, 150, 60, "turn_right",  0x0284},
 
-  // Speed Controls
-  {"SPEED -",    550, 325, 100, 60, "speed_down",  0x3341},
-  {"SPEED +",    665, 325, 100, 60, "speed_up",    0x3341},
+  // Column 4: Speech Reactivity & Speed Controls
+  {"SPEECH: ON", 550, 100, 215, 60, "toggle_speech",0x05E0},
+  {"TALK TEST",  550, 175, 215, 60, "test_speech",  0x38BD},
+  {"SPEED -",    550, 250, 100, 60, "speed_down",   0x3341},
+  {"SPEED +",    665, 250, 100, 60, "speed_up",     0x3341},
+  {"ALL HOME",   550, 325, 215, 60, "stand",        0x2595},
 };
 #else
 // Compact 240x240 / 240x320 Layout
@@ -571,7 +636,7 @@ const TouchButton TOUCH_BTNS[] = {
   {"DANCE",  160, 155, 65, 30, "dance", 0xF81F},
   {"BOW",     15, 190, 65, 30, "bow",   0x07E0},
   {"STOP",    87, 190, 65, 30, "stop",  0xF800},
-  {"WAVE",   160, 190, 65, 30, "wave",  0xFD20},
+  {"SPEECH", 160, 190, 65, 30, "toggle_speech", 0x05E0},
 };
 #endif
 const int NUM_TOUCH_BTNS = sizeof(TOUCH_BTNS) / sizeof(TouchButton);
@@ -622,6 +687,13 @@ void handleTouchAction(String action) {
   } else if (action == "speed_down") {
     moveDurationMs += 30;
     lcdStatusMessage = "Speed: " + String(moveDurationMs) + "ms";
+  } else if (action == "toggle_speech") {
+    speechReactEnabled = !speechReactEnabled;
+    lcdStatusMessage = speechReactEnabled ? "Speech React: ENABLED" : "Speech React: DISABLED";
+  } else if (action == "test_speech") {
+    lastSpeechTime = millis();
+    isSpeechActive = true;
+    lcdStatusMessage = "Testing Speech Reactivity...";
   } else if (action == "stop") {
     currentGait = "idle";
     applyStandPosture(200);
@@ -755,7 +827,50 @@ void parseCommand(String cmd) {
     return;
   }
 
-  // 5. Action & Gait Commands
+  // 5. Speech Reactivity & AI Audio Stream Commands
+  if (cmd.startsWith("AI_SPEAKING:") || cmd.startsWith("ai_speaking:") ||
+      cmd.startsWith("TALK:") || cmd.startsWith("talk:") ||
+      cmd.startsWith("TALKING:") || cmd.startsWith("talking:")) {
+    int colonIdx = cmd.indexOf(':');
+    String stateStr = cmd.substring(colonIdx + 1);
+    stateStr.toUpperCase();
+    stateStr.trim();
+    if (stateStr == "1" || stateStr == "ON" || stateStr == "TRUE" || stateStr == "START") {
+      lastSpeechTime = millis();
+      isSpeechActive = true;
+      lcdStatusMessage = "AI Speaking (Hexapod Reacts)";
+      Serial.println("[Hexapod] AI Speaking Animatronics -> ACTIVE");
+    } else {
+      isSpeechActive = false;
+      lastSpeechTime = 0;
+      if (currentGait == "idle") applyStandPosture(250);
+      lcdStatusMessage = "Hexapod Standing / Ready";
+      Serial.println("[Hexapod] AI Speaking Animatronics -> REST");
+    }
+    return;
+  }
+
+  if (cmd.startsWith("HEX:SPEECH_REACT:") || cmd.startsWith("hex:speech_react:") ||
+      cmd.startsWith("SPEECH_REACT:") || cmd.startsWith("speech_react:") ||
+      cmd.startsWith("SPEECH:") || cmd.startsWith("speech:")) {
+    int colonIdx = cmd.indexOf(':');
+    String valStr = cmd.substring(colonIdx + 1);
+    valStr.toUpperCase();
+    valStr.trim();
+    speechReactEnabled = (valStr == "1" || valStr == "ON" || valStr == "TRUE" || valStr == "ENABLE");
+    lcdStatusMessage = speechReactEnabled ? "Speech React: ENABLED" : "Speech React: DISABLED";
+    Serial.println("[Hexapod] Speech Reactivity set to: " + String(speechReactEnabled ? "ON" : "OFF"));
+    return;
+  }
+
+  if (cmd.equalsIgnoreCase("HEX:SPEECH_TOGGLE") || cmd.equalsIgnoreCase("SPEECH_TOGGLE") || cmd.equalsIgnoreCase("HEX:toggle_speech")) {
+    speechReactEnabled = !speechReactEnabled;
+    lcdStatusMessage = speechReactEnabled ? "Speech React: ENABLED" : "Speech React: DISABLED";
+    Serial.println("[Hexapod] Speech Reactivity toggled: " + String(speechReactEnabled ? "ON" : "OFF"));
+    return;
+  }
+
+  // 6. Action & Gait Commands
   if (cmd == "HEX:stand" || cmd == "hex:stand") {
     handleTouchAction("stand");
   } else if (cmd == "HEX:sit" || cmd == "hex:sit") {
@@ -855,6 +970,9 @@ void loop() {
 
   // 5. Update Gait Motion Step Loop
   updateGaitEngine();
+
+  // 6. Update Real-Time Speech Animatronics & Eye Blinking Engine
+  updateSpeechEngine();
 
   delay(2); // Short loop pause for CPU efficiency
 }

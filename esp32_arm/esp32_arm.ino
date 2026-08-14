@@ -106,10 +106,17 @@ int routineStepIndex = 0;
 
 // LCD Telemetry & Mascot Animation Variables
 String armStatusMessage = "7.0-Inch 6-DOF Robot Arm Online";
-String mascotExpression = "idle"; // idle, happy, shake, star, wink
+String mascotExpression = "idle"; // idle, happy, shake, star, wink, nod
 unsigned long lastTelemetryUpdate = 0;
 unsigned long lastMascotBlink = 0;
 bool mascotBlinkState = false;
+
+// Speech Conversational Gesturing State
+bool speechReactEnabled = true;
+bool isSpeechActive = false;
+unsigned long lastSpeechTime = 0;
+const unsigned long SPEECH_SUSTAIN_MS = 500;
+unsigned long lastSpeechGestureTime = 0;
 
 // Touch State
 bool isTouched = false;
@@ -398,6 +405,52 @@ void updateArmRoutineEngine() {
 }
 
 // =============================================================================
+// Real-Time Speech Conversational Gesturing Engine
+// =============================================================================
+void updateArmSpeechGestureEngine() {
+  unsigned long now = millis();
+
+  // Natural idle mascot blinking
+  if (now - lastMascotBlink > 3500) {
+    mascotBlinkState = true;
+    if (now - lastMascotBlink > 3700) {
+      mascotBlinkState = false;
+      lastMascotBlink = now;
+    }
+  }
+
+  if (!speechReactEnabled) return;
+  if (currentRoutine != "idle") return; // Manual routines have priority
+
+  if (isSpeechActive && (now - lastSpeechTime < SPEECH_SUSTAIN_MS || lastSpeechTime > 0)) {
+    if (now - lastSpeechGestureTime > 75) {
+      lastSpeechGestureTime = now;
+      float t = now * 0.0035f;
+
+      // Conversational gesturing angles centered around Home (90, 90, 90, 90, 90, 40)
+      float gBase     = 90.0f + sin(t * 1.6f) * 15.0f; // Waist sway 75° to 105°
+      float gShoulder = 90.0f + sin(t * 2.4f) * 12.0f; // Nodding 78° to 102°
+      float gElbow    = 90.0f - cos(t * 2.4f) * 14.0f; // Counter nod 76° to 104°
+      float gWristP   = 90.0f + sin(t * 3.0f) * 10.0f; // Wrist pitch tilt 80° to 100°
+      float gWristR   = 90.0f + cos(t * 1.8f) * 12.0f; // Wrist roll
+      float gClaw     = 40.0f + fabs(sin(t * 2.0f)) * 25.0f; // Subtle expressive claw pulse
+
+      float targets[6] = {gBase, gShoulder, gElbow, gWristP, gWristR, gClaw};
+      setArmTargetAngles(targets, 80);
+
+      mascotExpression = (sin(t * 3.0f) > 0.0f) ? "nod" : "happy";
+      armStatusMessage = "AI Speaking (Arm Gesturing)";
+    }
+  } else if (isSpeechActive) {
+    // Speech finished -> smoothly return to Home posture
+    isSpeechActive = false;
+    applyArmHomePosture(300);
+    mascotExpression = "idle";
+    armStatusMessage = "Arm Ready (Home)";
+  }
+}
+
+// =============================================================================
 // GT911 Capacitive Touchscreen Driver
 // =============================================================================
 void initTouchController() {
@@ -481,13 +534,13 @@ const TouchButton TOUCH_BTNS[] = {
   {"DANCE",       180, 290, 140, 55, "dance",         0xF81F},
   {"STOP",        180, 355, 140, 55, "stop",          0xF800},
 
-  // Column 3: Gripper Controls
+  // Column 3: Gripper Controls & Speech Reactivity
   {"OPEN CLAW",   635,  95, 140, 55, "open_gripper",  0x10B9},
   {"CLOSE CLAW",  635, 160, 140, 55, "close_gripper", 0xEF44},
   {"SPEED -",     635, 225,  65, 55, "speed_down",    0x3341},
   {"SPEED +",     710, 225,  65, 55, "speed_up",      0x3341},
-  {"PICK & PLACE",635, 290, 140, 55, "pick_and_place",0x8B5C},
-  {"RESET",       635, 355, 140, 55, "home",          0x6474},
+  {"SPEECH: ON",  635, 290, 140, 55, "toggle_speech", 0x05E0},
+  {"TALK TEST",   635, 355, 140, 55, "test_speech",   0x38BD},
 };
 const int NUM_TOUCH_BTNS = sizeof(TOUCH_BTNS) / sizeof(TouchButton);
 
@@ -534,6 +587,14 @@ void handleTouchAction(String action) {
   } else if (action == "speed_down") {
     moveDurationMs += 30;
     armStatusMessage = "Trajectory Speed: " + String(moveDurationMs) + "ms";
+  } else if (action == "toggle_speech") {
+    speechReactEnabled = !speechReactEnabled;
+    armStatusMessage = speechReactEnabled ? "Speech React: ENABLED" : "Speech React: DISABLED";
+  } else if (action == "test_speech") {
+    lastSpeechTime = millis();
+    isSpeechActive = true;
+    mascotExpression = "nod";
+    armStatusMessage = "Testing Speech Gestures...";
   } else if (action == "stop") {
     currentRoutine = "idle";
     applyArmHomePosture(200);
@@ -676,7 +737,52 @@ void parseArmCommand(String cmd) {
     return;
   }
 
-  // 5. Posture & Gesture Presets
+  // 5. Speech Reactivity & AI Audio Stream Commands
+  if (cmd.startsWith("AI_SPEAKING:") || cmd.startsWith("ai_speaking:") ||
+      cmd.startsWith("TALK:") || cmd.startsWith("talk:") ||
+      cmd.startsWith("TALKING:") || cmd.startsWith("talking:")) {
+    int colonIdx = cmd.indexOf(':');
+    String stateStr = cmd.substring(colonIdx + 1);
+    stateStr.toUpperCase();
+    stateStr.trim();
+    if (stateStr == "1" || stateStr == "ON" || stateStr == "TRUE" || stateStr == "START") {
+      lastSpeechTime = millis();
+      isSpeechActive = true;
+      mascotExpression = "nod";
+      armStatusMessage = "AI Speaking (Arm Gesturing)";
+      Serial.println("[Robot Arm] AI Speaking Gesturing -> ACTIVE");
+    } else {
+      isSpeechActive = false;
+      lastSpeechTime = 0;
+      applyArmHomePosture(300);
+      mascotExpression = "idle";
+      armStatusMessage = "Arm Ready (Home)";
+      Serial.println("[Robot Arm] AI Speaking Gesturing -> REST");
+    }
+    return;
+  }
+
+  if (cmd.startsWith("ARM:SPEECH_REACT:") || cmd.startsWith("arm:speech_react:") ||
+      cmd.startsWith("SPEECH_REACT:") || cmd.startsWith("speech_react:") ||
+      cmd.startsWith("SPEECH:") || cmd.startsWith("speech:")) {
+    int colonIdx = cmd.indexOf(':');
+    String valStr = cmd.substring(colonIdx + 1);
+    valStr.toUpperCase();
+    valStr.trim();
+    speechReactEnabled = (valStr == "1" || valStr == "ON" || valStr == "TRUE" || valStr == "ENABLE");
+    armStatusMessage = speechReactEnabled ? "Speech React: ENABLED" : "Speech React: DISABLED";
+    Serial.println("[Robot Arm] Speech Reactivity set to: " + String(speechReactEnabled ? "ON" : "OFF"));
+    return;
+  }
+
+  if (cmd.equalsIgnoreCase("ARM:SPEECH_TOGGLE") || cmd.equalsIgnoreCase("SPEECH_TOGGLE") || cmd.equalsIgnoreCase("ARM:toggle_speech")) {
+    speechReactEnabled = !speechReactEnabled;
+    armStatusMessage = speechReactEnabled ? "Speech React: ENABLED" : "Speech React: DISABLED";
+    Serial.println("[Robot Arm] Speech Reactivity toggled: " + String(speechReactEnabled ? "ON" : "OFF"));
+    return;
+  }
+
+  // 6. Posture & Gesture Presets
   if (cmd == "ARM:home" || cmd == "arm:home") {
     handleTouchAction("home");
   } else if (cmd == "ARM:rest" || cmd == "arm:rest") {
@@ -754,7 +860,10 @@ void loop() {
   // 4. Update Gesture Routine Engine
   updateArmRoutineEngine();
 
-  // 5. Output Real-Time Telemetry Stream
+  // 5. Update Speech Conversational Gesturing Engine
+  updateArmSpeechGestureEngine();
+
+  // 6. Output Real-Time Telemetry Stream
   printLiveTelemetry();
 
   delay(2); // Short pause for CPU efficiency

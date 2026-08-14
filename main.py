@@ -677,7 +677,32 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
             }
         )
     )
-    
+
+    function_declarations.append(
+        types.FunctionDeclaration(
+            name="set_speech_reactivity",
+            description=(
+                "Controls AI speech reactivity across robots. Choose which robots react when the AI speaks: "
+                "'birds' (mouth moves & LED eyes blink), 'hexapod' (LED eyes blink & body sways), "
+                "'arm' (conversational gestures), or 'all' (all robots react)."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "robot": {
+                        "type": "string",
+                        "description": "Target robot: 'birds', 'hexapod', 'arm', or 'all'."
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "True to enable speech reactivity, False to disable."
+                    }
+                },
+                "required": ["robot", "enabled"]
+            }
+        )
+    )
+
     if function_declarations:
         tools.append(types.Tool(function_declarations=function_declarations))
 
@@ -1916,12 +1941,59 @@ class ESP32PulseWindow:
         # Divider
         ttk.Separator(self.root, orient="horizontal").pack(fill="x", padx=15, pady=2)
 
-        # Parrot Speaker Selection & Microphone Animatronics Bar
-        parrot_frame = ttk.LabelFrame(self.root, text=" 🦜 Parrot Speaker Selection & Mic Sound Reactivity (esp32_Birds.ino) ", padding=6)
-        parrot_frame.pack(fill="x", padx=15, pady=(2, 4))
+        # AI Speech Reactivity & Multi-Robot Dispatch Bar
+        speech_frame = ttk.LabelFrame(self.root, text=" 🎙️ AI Speech Reactivity & Multi-Robot Dispatch (Birds • Hexapod • Robot Arm) ", padding=6)
+        speech_frame.pack(fill="x", padx=15, pady=(2, 4))
 
         self.parrot_mode_var = tk.StringVar(value="left")
         self.mic_react_var = tk.BooleanVar(value=True)
+        self.speech_birds_var = tk.BooleanVar(value=getattr(self.audio_loop, 'speech_react_birds', True))
+        self.speech_hexapod_var = tk.BooleanVar(value=getattr(self.audio_loop, 'speech_react_hexapod', True))
+        self.speech_arm_var = tk.BooleanVar(value=getattr(self.audio_loop, 'speech_react_arm', True))
+
+        def on_toggle_robot_speech(robot_name):
+            if robot_name == "birds":
+                en = self.speech_birds_var.get()
+                self.audio_loop.set_speech_reactivity("birds", en)
+            elif robot_name == "hexapod":
+                en = self.speech_hexapod_var.get()
+                self.audio_loop.set_speech_reactivity("hexapod", en)
+            elif robot_name == "arm":
+                en = self.speech_arm_var.get()
+                self.audio_loop.set_speech_reactivity("arm", en)
+
+        def on_preset_speech_react(preset):
+            if preset == "all":
+                self.speech_birds_var.set(True)
+                self.speech_hexapod_var.set(True)
+                self.speech_arm_var.set(True)
+                self.audio_loop.set_speech_reactivity("all", True)
+            elif preset == "birds":
+                self.speech_birds_var.set(True)
+                self.speech_hexapod_var.set(False)
+                self.speech_arm_var.set(False)
+                self.audio_loop.set_speech_reactivity("birds", True)
+                self.audio_loop.set_speech_reactivity("hexapod", False)
+                self.audio_loop.set_speech_reactivity("arm", False)
+            elif preset == "hexapod":
+                self.speech_birds_var.set(False)
+                self.speech_hexapod_var.set(True)
+                self.speech_arm_var.set(False)
+                self.audio_loop.set_speech_reactivity("birds", False)
+                self.audio_loop.set_speech_reactivity("hexapod", True)
+                self.audio_loop.set_speech_reactivity("arm", False)
+            elif preset == "arm":
+                self.speech_birds_var.set(False)
+                self.speech_hexapod_var.set(False)
+                self.speech_arm_var.set(True)
+                self.audio_loop.set_speech_reactivity("birds", False)
+                self.audio_loop.set_speech_reactivity("hexapod", False)
+                self.audio_loop.set_speech_reactivity("arm", True)
+            elif preset == "mute":
+                self.speech_birds_var.set(False)
+                self.speech_hexapod_var.set(False)
+                self.speech_arm_var.set(False)
+                self.audio_loop.set_speech_reactivity("all", False)
 
         def on_parrot_select(choice):
             self.parrot_mode_var.set(choice)
@@ -1937,44 +2009,20 @@ class ESP32PulseWindow:
             self.audio_loop.set_parrot_sound_reactivity(en)
 
         def on_test_speech_pulse():
-            conn = self.audio_loop.serial_left or self.audio_loop.serial_conn
-            if conn and conn.is_open:
-                try:
-                    conn.write(b"AI_SPEAKING:1\r\n")
-                    self.root.after(1500, lambda: conn.write(b"AI_SPEAKING:0\r\n"))
-                except Exception:
-                    pass
-            self.update_status("Tested 1.5s speech animatronics pulse on selected parrot(s)")
+            self.audio_loop.dispatch_speech_event(True)
+            self.root.after(1500, lambda: self.audio_loop.dispatch_speech_event(False))
+            self.update_status("Tested 1.5s speech animatronics pulse across all enabled robots")
 
-        p_btns_dict = {}
-        p_choices = [
-            ("👈 Left Parrot", "left", "#0284c7"),
-            ("🦜 Both Parrots", "both", "#d97706"),
-            ("👉 Right Parrot", "right", "#7c3aed"),
-        ]
-        for c_idx, (p_lbl, p_val, p_col) in enumerate(p_choices):
-            p_btn = tk.Button(
-                parrot_frame,
-                text=p_lbl,
-                font=("Segoe UI", 9, "bold"),
-                bg=p_col,
-                fg="#ffffff",
-                relief="sunken" if p_val == "left" else "flat",
-                bd=2 if p_val == "left" else 1,
-                cursor="hand2",
-                padx=8,
-                pady=3,
-                command=lambda pv=p_val: on_parrot_select(pv)
-            )
-            p_btn.grid(row=0, column=c_idx, padx=3, pady=2, sticky="ew")
-            parrot_frame.columnconfigure(c_idx, weight=1)
-            p_btns_dict[p_val] = p_btn
+        # Row 0: Multi-Robot Reactivity Checkboxes & Test Pulse
+        row0_frame = ttk.Frame(speech_frame)
+        row0_frame.pack(fill="x", pady=(0, 3))
 
-        # Mic Reactivity Checkbox
-        mic_chk = tk.Checkbutton(
-            parrot_frame,
-            text="🎤 Mic Sound Reactivity: ON",
-            variable=self.mic_react_var,
+        ttk.Label(row0_frame, text="Active Talking Robots:", font=("Segoe UI", 9, "bold"), foreground="#38bdf8").pack(side="left", padx=(0, 6))
+
+        birds_chk = tk.Checkbutton(
+            row0_frame,
+            text="🦜 Birds (Mouth & Eyes)",
+            variable=self.speech_birds_var,
             font=("Segoe UI", 9, "bold"),
             bg="#0f172a",
             fg="#34d399",
@@ -1982,26 +2030,123 @@ class ESP32PulseWindow:
             activebackground="#0f172a",
             activeforeground="#34d399",
             cursor="hand2",
+            command=lambda: on_toggle_robot_speech("birds")
+        )
+        birds_chk.pack(side="left", padx=4)
+
+        hex_chk = tk.Checkbutton(
+            row0_frame,
+            text="🤖 Hexapod (Eyes & Sway)",
+            variable=self.speech_hexapod_var,
+            font=("Segoe UI", 9, "bold"),
+            bg="#0f172a",
+            fg="#38bdf8",
+            selectcolor="#1e293b",
+            activebackground="#0f172a",
+            activeforeground="#38bdf8",
+            cursor="hand2",
+            command=lambda: on_toggle_robot_speech("hexapod")
+        )
+        hex_chk.pack(side="left", padx=4)
+
+        arm_chk = tk.Checkbutton(
+            row0_frame,
+            text="🦾 Robot Arm (Gestures)",
+            variable=self.speech_arm_var,
+            font=("Segoe UI", 9, "bold"),
+            bg="#0f172a",
+            fg="#c084fc",
+            selectcolor="#1e293b",
+            activebackground="#0f172a",
+            activeforeground="#c084fc",
+            cursor="hand2",
+            command=lambda: on_toggle_robot_speech("arm")
+        )
+        arm_chk.pack(side="left", padx=4)
+
+        mic_chk = tk.Checkbutton(
+            row0_frame,
+            text="🎤 Mic Sound Reactivity",
+            variable=self.mic_react_var,
+            font=("Segoe UI", 9, "bold"),
+            bg="#0f172a",
+            fg="#fbbf24",
+            selectcolor="#1e293b",
+            activebackground="#0f172a",
+            activeforeground="#fbbf24",
+            cursor="hand2",
             command=on_toggle_mic_react
         )
-        mic_chk.grid(row=0, column=3, padx=6, pady=2)
-        parrot_frame.columnconfigure(3, weight=1)
+        mic_chk.pack(side="left", padx=6)
 
-        # Test Pulse Button
         test_pulse_btn = tk.Button(
-            parrot_frame,
-            text="⚡ Test Speech (1.5s)",
+            row0_frame,
+            text="⚡ Test Speech Pulse (1.5s)",
             font=("Segoe UI", 9, "bold"),
-            bg="#334155",
-            fg="#38bdf8",
+            bg="#0284c7",
+            fg="#ffffff",
+            activebackground="#0369a1",
+            activeforeground="#ffffff",
             relief="flat",
             cursor="hand2",
             padx=8,
-            pady=3,
+            pady=2,
             command=on_test_speech_pulse
         )
-        test_pulse_btn.grid(row=0, column=4, padx=3, pady=2, sticky="ew")
-        parrot_frame.columnconfigure(4, weight=1)
+        test_pulse_btn.pack(side="right", padx=2)
+
+        # Row 1: Parrot Choice & Quick Presets
+        row1_frame = ttk.Frame(speech_frame)
+        row1_frame.pack(fill="x")
+
+        ttk.Label(row1_frame, text="Parrot Speaker:", font=("Segoe UI", 9, "bold"), foreground="#94a3b8").pack(side="left", padx=(0, 4))
+
+        p_btns_dict = {}
+        p_choices = [
+            ("👈 Left", "left", "#0284c7"),
+            ("🦜 Both", "both", "#d97706"),
+            ("👉 Right", "right", "#7c3aed"),
+        ]
+        for p_lbl, p_val, p_col in p_choices:
+            p_btn = tk.Button(
+                row1_frame,
+                text=p_lbl,
+                font=("Segoe UI", 8, "bold"),
+                bg=p_col,
+                fg="#ffffff",
+                relief="sunken" if p_val == "left" else "flat",
+                bd=2 if p_val == "left" else 1,
+                cursor="hand2",
+                padx=6,
+                pady=1,
+                command=lambda pv=p_val: on_parrot_select(pv)
+            )
+            p_btn.pack(side="left", padx=2)
+            p_btns_dict[p_val] = p_btn
+
+        ttk.Label(row1_frame, text="  Quick Presets:", font=("Segoe UI", 9, "bold"), foreground="#94a3b8").pack(side="left", padx=(6, 4))
+
+        presets = [
+            ("✨ All Robots", "all", "#059669"),
+            ("🦜 Birds Only", "birds", "#0284c7"),
+            ("🤖 Hexapod Only", "hexapod", "#0ea5e9"),
+            ("🦾 Arm Only", "arm", "#7c3aed"),
+            ("🔇 Mute All", "mute", "#475569"),
+        ]
+        for pr_lbl, pr_key, pr_col in presets:
+            pr_btn = tk.Button(
+                row1_frame,
+                text=pr_lbl,
+                font=("Segoe UI", 8, "bold"),
+                bg=pr_col,
+                fg="#ffffff",
+                relief="flat",
+                cursor="hand2",
+                padx=5,
+                pady=1,
+                command=lambda pk=pr_key: on_preset_speech_react(pk)
+            )
+            pr_btn.pack(side="left", padx=2)
 
         # Choreography & Light Routines Bar
         routine_frame = ttk.LabelFrame(self.root, text=" 🎭 Waveshare 7\" Touch-LCD Birds Choreography & Light Routines (esp32_Birds.ino) ", padding=6)
@@ -2263,6 +2408,44 @@ class ESP32PulseWindow:
         bt_scan_btn.grid(row=0, column=3, padx=4)
 
         refresh_bt_ports(auto_conn=False)
+
+        # Hexapod Speech Reactivity Frame
+        hex_speech_frame = ttk.LabelFrame(tab_hexapod, text=" 🎙️ Hexapod Speech Reactivity (LED Eyes & Expressive Body Sway) ", padding=8)
+        hex_speech_frame.pack(fill="x", padx=5, pady=(0, 8))
+
+        def on_hexapod_tab_speech_toggle():
+            en = self.speech_hexapod_var.get()
+            self.audio_loop.set_speech_reactivity("hexapod", en)
+
+        hex_speech_chk = tk.Checkbutton(
+            hex_speech_frame,
+            text="🎙️ Hexapod Speech Reactivity (LED Eyes Blink & Body Sways on AI Speech)",
+            variable=self.speech_hexapod_var,
+            font=("Segoe UI", 9, "bold"),
+            bg="#0f172a",
+            fg="#38bdf8",
+            selectcolor="#1e293b",
+            activebackground="#0f172a",
+            activeforeground="#38bdf8",
+            cursor="hand2",
+            command=on_hexapod_tab_speech_toggle
+        )
+        hex_speech_chk.pack(side="left", padx=5)
+
+        hex_test_speech_btn = tk.Button(
+            hex_speech_frame,
+            text="⚡ Test Hexapod Speech (1.5s)",
+            font=("Segoe UI", 9, "bold"),
+            bg="#0284c7",
+            fg="#ffffff",
+            activebackground="#0369a1",
+            activeforeground="#ffffff",
+            relief="flat",
+            cursor="hand2",
+            padx=10,
+            command=lambda: self.audio_loop.dispatch_speech_event(True) or self.root.after(1500, lambda: self.audio_loop.dispatch_speech_event(False))
+        )
+        hex_test_speech_btn.pack(side="right", padx=5)
 
         # Preset Motion Buttons Frame
         hexapod_actions_frame = ttk.LabelFrame(tab_hexapod, text=" 🤖 Hexapod Motion Functions & Preset Movements ", padding=10)
@@ -2722,6 +2905,44 @@ class ESP32PulseWindow:
         )
         arm_tab_conn_btn.pack(side="right", padx=5)
 
+        # Robot Arm Speech Conversational Gesturing Frame
+        arm_speech_frame = ttk.LabelFrame(tab_arm, text=" 🎙️ Robot Arm Speech Gesturing (Conversational Swivel & Nodding) ", padding=8)
+        arm_speech_frame.pack(fill="x", padx=5, pady=(0, 8))
+
+        def on_arm_tab_speech_toggle():
+            en = self.speech_arm_var.get()
+            self.audio_loop.set_speech_reactivity("arm", en)
+
+        arm_speech_chk = tk.Checkbutton(
+            arm_speech_frame,
+            text="🎙️ Conversational Speech Gestures (Base Swivel, Shoulder/Elbow Nods on AI Speech)",
+            variable=self.speech_arm_var,
+            font=("Segoe UI", 9, "bold"),
+            bg="#0f172a",
+            fg="#c084fc",
+            selectcolor="#1e293b",
+            activebackground="#0f172a",
+            activeforeground="#c084fc",
+            cursor="hand2",
+            command=on_arm_tab_speech_toggle
+        )
+        arm_speech_chk.pack(side="left", padx=5)
+
+        arm_test_speech_btn = tk.Button(
+            arm_speech_frame,
+            text="⚡ Test Arm Speech Gestures (1.5s)",
+            font=("Segoe UI", 9, "bold"),
+            bg="#0284c7",
+            fg="#ffffff",
+            activebackground="#0369a1",
+            activeforeground="#ffffff",
+            relief="flat",
+            cursor="hand2",
+            padx=10,
+            command=lambda: self.audio_loop.dispatch_speech_event(True) or self.root.after(1500, lambda: self.audio_loop.dispatch_speech_event(False))
+        )
+        arm_test_speech_btn.pack(side="right", padx=5)
+
         # 2. Robot Arm Gestures & Demonstrations Frame
         arm_gestures_frame = ttk.LabelFrame(tab_arm, text=" 🎭 Robot Arm Gestures & Preset Movements ", padding=10)
         arm_gestures_frame.pack(fill="x", padx=5, pady=(0, 8))
@@ -2835,6 +3056,21 @@ class ESP32PulseWindow:
         if self.status_label and self.root:
             try:
                 self.root.after(0, lambda: self.status_label.config(text=f"Status: {text}"))
+            except Exception:
+                pass
+
+    def sync_speech_react_switches(self):
+        """Synchronizes GUI checkboxes with audio loop reactivity state."""
+        if self.root:
+            def _sync():
+                if hasattr(self, 'speech_birds_var') and self.speech_birds_var:
+                    self.speech_birds_var.set(getattr(self.audio_loop, 'speech_react_birds', True))
+                if hasattr(self, 'speech_hexapod_var') and self.speech_hexapod_var:
+                    self.speech_hexapod_var.set(getattr(self.audio_loop, 'speech_react_hexapod', True))
+                if hasattr(self, 'speech_arm_var') and self.speech_arm_var:
+                    self.speech_arm_var.set(getattr(self.audio_loop, 'speech_react_arm', True))
+            try:
+                self.root.after(0, _sync)
             except Exception:
                 pass
 
@@ -3077,6 +3313,11 @@ class AudioLoop:
         self.audio_stream = None
         self.playing_audio = False
 
+        # Multi-Robot Speech Reactivity Flags
+        self.speech_react_birds = True
+        self.speech_react_hexapod = True
+        self.speech_react_arm = True
+
     def connect_esp32(self, board: str, port_name: str):
         import serial
         board = board.lower()
@@ -3315,6 +3556,73 @@ class AudioLoop:
 
     async def set_parrot_sound_reactivity_async(self, enabled: bool) -> dict:
         return await asyncio.to_thread(self.set_parrot_sound_reactivity, enabled)
+
+    def dispatch_speech_event(self, speaking: bool):
+        """Broadcasts AI_SPEAKING:1 / AI_SPEAKING:0 over serial/BT to all enabled robots in real time."""
+        cmd_bytes = b"AI_SPEAKING:1\r\n" if speaking else b"AI_SPEAKING:0\r\n"
+        cmd_str = "AI_SPEAKING:1\r\n" if speaking else "AI_SPEAKING:0\r\n"
+
+        # 1. Birds / Parrot Controller
+        if getattr(self, 'speech_react_birds', True):
+            conn = getattr(self, 'serial_birds', None) or getattr(self, 'serial_left', None) or getattr(self, 'serial_conn', None)
+            if conn and conn.is_open:
+                try:
+                    conn.write(cmd_bytes)
+                    conn.flush()
+                except Exception:
+                    pass
+
+        # 2. Hexapod Controller
+        if getattr(self, 'speech_react_hexapod', True):
+            if hasattr(self, 'hexapod') and self.hexapod:
+                try:
+                    self.hexapod.send_bt_command(cmd_str)
+                except Exception:
+                    pass
+
+        # 3. 6-DOF Robot Arm Controller
+        if getattr(self, 'speech_react_arm', True):
+            conn_arm = getattr(self, 'serial_arm', None)
+            if conn_arm and conn_arm.is_open:
+                try:
+                    conn_arm.write(cmd_bytes)
+                    conn_arm.flush()
+                except Exception:
+                    pass
+
+    def set_speech_reactivity(self, robot: str = "all", enabled: bool = True) -> dict:
+        """Enables or disables speech reactivity for specific robots ('birds', 'hexapod', 'arm', 'all')."""
+        robot = (robot or "all").lower().strip()
+        if robot in ("birds", "bird", "parrot", "parrots"):
+            self.speech_react_birds = enabled
+            msg = f"Birds speech animatronics (mouth & eyes) {'ENABLED' if enabled else 'DISABLED'}"
+        elif robot in ("hexapod", "hexipod", "shobots", "bot"):
+            self.speech_react_hexapod = enabled
+            msg = f"Hexapod speech reactivity (eyes & body sway) {'ENABLED' if enabled else 'DISABLED'}"
+        elif robot in ("arm", "robot_arm", "robotarm"):
+            self.speech_react_arm = enabled
+            msg = f"Robot Arm conversational gesturing {'ENABLED' if enabled else 'DISABLED'}"
+        elif robot in ("all", "both", "every", "robots"):
+            self.speech_react_birds = enabled
+            self.speech_react_hexapod = enabled
+            self.speech_react_arm = enabled
+            msg = f"All robots speech reactivity {'ENABLED' if enabled else 'DISABLED'}"
+        else:
+            return {"status": "error", "message": f"Unknown robot '{robot}'. Options: 'all', 'birds', 'hexapod', 'arm'"}
+
+        print(f"\n[Speech Reactivity] {msg}")
+        if hasattr(self, 'gui_window') and self.gui_window and hasattr(self.gui_window, 'sync_speech_react_switches'):
+            self.gui_window.sync_speech_react_switches()
+        return {
+            "status": "success",
+            "message": msg,
+            "birds": self.speech_react_birds,
+            "hexapod": self.speech_react_hexapod,
+            "arm": self.speech_react_arm
+        }
+
+    async def set_speech_reactivity_async(self, robot: str = "all", enabled: bool = True) -> dict:
+        return await asyncio.to_thread(self.set_speech_reactivity, robot, enabled)
 
     async def send_tello_command(self, command: str) -> dict:
         return await asyncio.to_thread(self.tello.send_cmd, command)
@@ -3710,6 +4018,17 @@ class AudioLoop:
                                         id=fc.id
                                     )
                                 )
+                            elif fc.name == "set_speech_reactivity":
+                                robot = fc.args.get("robot", "all")
+                                enabled = fc.args.get("enabled", True)
+                                result = await self.set_speech_reactivity_async(robot, enabled)
+                                function_responses.append(
+                                    types.FunctionResponse(
+                                        name=fc.name,
+                                        response=result,
+                                        id=fc.id
+                                    )
+                                )
                             elif fc.name == "pulse_led":
                                 count = fc.args.get("count", 1)
                                 gpio = fc.args.get("gpio", 2)
@@ -3739,13 +4058,7 @@ class AudioLoop:
                     self.audio_in_queue.get_nowait()
                 if self.playing_audio:
                     self.playing_audio = False
-                    conn = self.serial_left or self.serial_conn
-                    if conn and conn.is_open:
-                        try:
-                            conn.write(b"AI_SPEAKING:0\r\n")
-                            conn.flush()
-                        except Exception:
-                            pass
+                    self.dispatch_speech_event(False)
 
     async def play_audio(self):
         output_device_index = self.speaker_idx
@@ -3763,23 +4076,11 @@ class AudioLoop:
                 bytestream = await self.audio_in_queue.get()
                 if not self.playing_audio:
                     self.playing_audio = True
-                    conn = self.serial_left or self.serial_conn
-                    if conn and conn.is_open:
-                        try:
-                            conn.write(b"AI_SPEAKING:1\r\n")
-                            conn.flush()
-                        except Exception:
-                            pass
+                    self.dispatch_speech_event(True)
                 await asyncio.to_thread(stream.write, bytestream)
                 if self.audio_in_queue.empty():
                     self.playing_audio = False
-                    conn = self.serial_left or self.serial_conn
-                    if conn and conn.is_open:
-                        try:
-                            conn.write(b"AI_SPEAKING:0\r\n")
-                            conn.flush()
-                        except Exception:
-                            pass
+                    self.dispatch_speech_event(False)
 
     async def run(self):
         birds_port = getattr(self, 'esp32_birds_port', None) or self.esp32_left_port

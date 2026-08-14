@@ -126,6 +126,8 @@ unsigned long lastSpeechMouthToggle = 0;
 bool speechMouthOpen = false;
 unsigned long lastSpeechWingToggle = 0;
 bool speechWingFlap = false;
+unsigned long lastSpeechEyeToggle = 0;
+bool speechEyeBlinkState = false;
 
 // MCP23017 Pin States (0 = LOW, 1 = HIGH)
 uint16_t mcpPrimaryLatch  = 0x0000; // Port A (bits 0-7) + Port B (bits 8-15)
@@ -631,7 +633,25 @@ void updateSpeechMotionEngine() {
       mouthOpenPercent = speechMouthOpen ? 90 : 15;
     }
 
-    // --- B. Wing Flapping Movement ---
+    // --- B. Dynamic LED Eye Blinking / Pulsing on Speech ---
+    if (now - lastSpeechEyeToggle > 160) {
+      speechEyeBlinkState = !speechEyeBlinkState;
+      lastSpeechEyeToggle = now;
+
+      if (selectedParrot == PARROT_LEFT || selectedParrot == PARROT_BOTH) {
+        writeMCPPin(0, 1, speechEyeBlinkState);  // L Parrot Eyes (Bit 1)
+      } else {
+        writeMCPPin(0, 1, false);
+      }
+
+      if (selectedParrot == PARROT_RIGHT || selectedParrot == PARROT_BOTH) {
+        writeMCPPin(0, 12, speechEyeBlinkState); // R Parrot Eyes (Bit 12)
+      } else {
+        writeMCPPin(0, 12, false);
+      }
+    }
+
+    // --- C. Wing Flapping Movement ---
     if (now - lastSpeechWingToggle > 180) {
       speechWingFlap = !speechWingFlap;
       lastSpeechWingToggle = now;
@@ -649,7 +669,7 @@ void updateSpeechMotionEngine() {
       }
     }
 
-    // --- C. 3 Base Servos of Selected Parrot (Gentle Slow-to-Medium Speed) ---
+    // --- D. 3 Base Servos of Selected Parrot (Gentle Slow-to-Medium Speed) ---
     // Channel 0: Up/Down Tilt (78° to 102°)
     // Channel 1: Right/Left Side-to-Side Sway (74° to 106°)
     // Channel 2: Turn / Rotate (70° to 110°)
@@ -673,7 +693,7 @@ void updateSpeechMotionEngine() {
       setDriverServoAngle(1, 2, rTurnAngle, 100); // Right Parrot Rotate
     }
 
-    // --- D. Spotlight Movement & Lighting ---
+    // --- E. Spotlight Movement & Lighting ---
     if (selectedParrot == PARROT_LEFT || selectedParrot == PARROT_BOTH) {
       float lSpotUp  = 90.0f + sin(t * 1.8f) * 16.0f;
       float lSpotRot = 90.0f + cos(t * 1.4f) * 22.0f;
@@ -694,7 +714,7 @@ void updateSpeechMotionEngine() {
       writeMCPPin(0, 14, false);
     }
 
-    // --- E. Center Turntable (Slow Right and Left Rotation) ---
+    // --- F. Center Turntable (Slow Right and Left Rotation) ---
     float ttAngle = 90.0f + sin(t * 1.2f) * 35.0f; // 55° to 125°
     setDriverServoAngle(1, 5, ttAngle, 150);        // Center Turntable Rotate
 
@@ -708,6 +728,7 @@ void updateSpeechMotionEngine() {
       setDriverServoAngle(0, 1, 90.0f, 250);
       setDriverServoAngle(0, 2, 90.0f, 250);
       writeMCPPin(0, 0, false); // Mouth OFF
+      writeMCPPin(0, 1, false); // Eyes OFF
       writeMCPPin(0, 2, false); // Wings OFF
       writeMCPPin(0, 3, false); // Light OFF
     }
@@ -717,6 +738,7 @@ void updateSpeechMotionEngine() {
       setDriverServoAngle(1, 1, 90.0f, 250);
       setDriverServoAngle(1, 2, 90.0f, 250);
       writeMCPPin(0, 11, false); // Mouth OFF
+      writeMCPPin(0, 12, false); // Eyes OFF
       writeMCPPin(0, 13, false); // Wings OFF
       writeMCPPin(0, 14, false); // Light OFF
     }
@@ -905,11 +927,19 @@ void updateAnimations() {
   float dt = (now - lastAnimUpdate) / 1000.0f;
   lastAnimUpdate = now;
 
-  // 1. Mascot Eye Blinking Logic
+  // 1. Mascot Eye Blinking Logic & Idle Natural Eye Blinks
   if (now - lastBlinkTime > 3500) {
     eyeBlinkState = true;
+    if (!isSpeechActive && currentRoutine == "idle") {
+      writeMCPPin(0, 1, true);  // L Parrot Eyes ON briefly
+      writeMCPPin(0, 12, true); // R Parrot Eyes ON briefly
+    }
     if (now - lastBlinkTime > 3700) {
       eyeBlinkState = false;
+      if (!isSpeechActive && currentRoutine == "idle") {
+        writeMCPPin(0, 1, false);
+        writeMCPPin(0, 12, false);
+      }
       lastBlinkTime = now;
     }
   }
@@ -1009,15 +1039,25 @@ void parseCommand(String cmd) {
     return;
   }
 
-  // "MIC_REACT:<1|0|ON|OFF>", "MIC:<1|0|ON|OFF>"
-  if (cmd.startsWith("MIC_REACT:") || cmd.startsWith("mic_react:") || cmd.startsWith("MIC:") || cmd.startsWith("mic:")) {
+  // "SPEECH_REACT:<1|0|ON|OFF>", "SPEECH:<1|0|ON|OFF>", "MIC_REACT:<1|0|ON|OFF>", "MIC:<1|0|ON|OFF>"
+  if (cmd.startsWith("SPEECH_REACT:") || cmd.startsWith("speech_react:") ||
+      cmd.startsWith("SPEECH:") || cmd.startsWith("speech:") ||
+      cmd.startsWith("MIC_REACT:") || cmd.startsWith("mic_react:") ||
+      cmd.startsWith("MIC:") || cmd.startsWith("mic:")) {
     int colonIdx = cmd.indexOf(':');
     String valStr = cmd.substring(colonIdx + 1);
     valStr.toUpperCase();
     valStr.trim();
     micReactivityEnabled = (valStr == "1" || valStr == "ON" || valStr == "TRUE" || valStr == "ENABLE");
-    statusMessage = micReactivityEnabled ? "Mic React: ENABLED" : "Mic React: DISABLED";
-    Serial.println("[ESP32-Touch-7] Mic Reactivity set to: " + String(micReactivityEnabled ? "ON" : "OFF"));
+    statusMessage = micReactivityEnabled ? "Speech React: ENABLED" : "Speech React: DISABLED";
+    Serial.println("[ESP32-Touch-7] Speech Reactivity set to: " + String(micReactivityEnabled ? "ON" : "OFF"));
+    return;
+  }
+
+  if (cmd.equalsIgnoreCase("SPEECH_TOGGLE") || cmd.equalsIgnoreCase("MIC_TOGGLE")) {
+    micReactivityEnabled = !micReactivityEnabled;
+    statusMessage = micReactivityEnabled ? "Speech React: ENABLED" : "Speech React: DISABLED";
+    Serial.println("[ESP32-Touch-7] Speech Reactivity toggled to: " + String(micReactivityEnabled ? "ON" : "OFF"));
     return;
   }
 
