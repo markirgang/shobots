@@ -1,12 +1,13 @@
 /*
-  Hexapod Controller - ESP-32-Touch-LCD 7-Inch 6-DOF Robot Arm Firmware
+  Hexapod Controller - ESP-32-Touch-LCD 7B 6-DOF Robot Arm Firmware
   =============================================================================
-  Hardware: ESP32-S3-Touch-LCD-7 (7.0" 800x480 Capacitive Touchscreen, GT911 Controller)
+  Hardware: Waveshare ESP32-S3-Touch-LCD-7B (7.0" 1024x600 HD Capacitive Touchscreen, GT911 Controller)
   Substituted for: ESP-32 DevKit
 
   Features:
-    - 7.0-inch 800x480 Widescreen Capacitive Touchscreen Dashboard
+    - 7.0-inch 1024x600 High-Definition Capacitive Touchscreen Dashboard
     - GT911 High-Precision 5-Point Capacitive Multi-Touch Controller
+    - Onboard IO Expander (CH422G) Backlight & Power Control (EXIO2 DISP, EXIO6 LCD_VDD_EN, EXIO1 TP_RST)
     - Real-Time Live Telemetry:
         * 6-DOF Joint Angles & Visual Degree Gauges (Base, Shoulder, Elbow, Wrist Pitch, Wrist Roll, Claw)
         * Cartesian 3D End-Effector (X, Y, Z, Pitch, Roll) Coordinates & Reachability
@@ -19,12 +20,13 @@
     - PCA9685 16-Channel I2C Servo Driver (Address 0x40 on GPIO 8 SDA / GPIO 9 SCL)
     - Multi-Channel Control: USB CDC Serial, Bluetooth / BLE, and Direct Widescreen Touch
 
-  Pinout (Waveshare ESP32-S3-Touch-LCD-7):
-    - I2C Bus (Shared for GT911 Touch & PCA9685 Servo Driver):
+  Pinout (Waveshare ESP32-S3-Touch-LCD-7B):
+    - I2C Bus (Shared for GT911 Touch, IO Expander & PCA9685 Servo Driver):
         * SDA : GPIO 8 (PH2.0 4-Pin I2C Header)
         * SCL : GPIO 9 (PH2.0 4-Pin I2C Header)
         * TP_INT: GPIO 4
         * GT911 Address: 0x5D (or 0x14)
+        * IO Expander (CH422G): Address 0x24 / 0x38 (Backlight DISP=EXIO2, Power=EXIO6, Reset=EXIO1)
     - PCA9685 Servo Driver (I2C Address: 0x40):
         * Ch 0: Waist / Base Rotation (0 - 180 deg, default 90)
         * Ch 1: Shoulder Pitch        (0 - 180 deg, default 90)
@@ -39,6 +41,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <math.h>
+#include "driver/i2s.h"
 
 #if defined(CONFIG_BT_ENABLED) && !defined(CONFIG_IDF_TARGET_ESP32S3)
 #include <BluetoothSerial.h>
@@ -49,17 +52,47 @@ BluetoothSerial SerialBT;
 #endif
 
 // =============================================================================
+// MAX98357A I2S Mono Audio Amplifier Pinout & Configuration
+// =============================================================================
+#ifndef I2S_BCLK_PIN
+#define I2S_BCLK_PIN          19   // I2S Bit Clock (BCLK / BCK)
+#endif
+#ifndef I2S_LRC_PIN
+#define I2S_LRC_PIN           20   // I2S Word Select / Left-Right Clock (LRC / WS)
+#endif
+#ifndef I2S_DOUT_PIN
+#define I2S_DOUT_PIN          21   // I2S Serial Data Out (DIN on MAX98357A)
+#endif
+#define I2S_PORT              I2S_NUM_0
+#define I2S_SAMPLE_RATE       22050
+#define AUDIO_BUF_SIZE        256
+
+// =============================================================================
 // Hardware Profile Selection
 // =============================================================================
-#define BOARD_ESP32_TOUCH_LCD_7 1 // 7.0-inch 800x480 Capacitive Touchscreen (GT911)
+// Select ONE board profile below (Default: Waveshare ESP32-S3-Touch-LCD-7B):
+#define BOARD_ESP32_TOUCH_LCD_7B 1 // Waveshare ESP32-S3-Touch-LCD-7B (7.0" 1024x600 HD GT911 + CH422G IO)
+//#define BOARD_ESP32_TOUCH_LCD_7A 1 // Waveshare ESP32-S3-Touch-LCD-7 (7.0" 800x480 Standard GT911)
 
-#define I2C_SDA_PIN      8
-#define I2C_SCL_PIN      9
-#define TP_INT_PIN       4
-#define TP_RST_PIN      -1
-#define SCREEN_WIDTH   800
-#define SCREEN_HEIGHT  480
-#define TOUCH_I2C_ADDR 0x5D // GT911 Capacitive Touch Controller
+#if defined(BOARD_ESP32_TOUCH_LCD_7B)
+  #define I2C_SDA_PIN      8
+  #define I2C_SCL_PIN      9
+  #define TP_INT_PIN       4
+  #define TP_RST_PIN      -1
+  #define SCREEN_WIDTH  1024
+  #define SCREEN_HEIGHT  600
+  #define TOUCH_I2C_ADDR 0x5D // GT911 Capacitive Touch Controller
+  #define HAS_CH422G_IO    1  // Onboard IO Expander for Backlight & Power Control
+#else
+  #define I2C_SDA_PIN      8
+  #define I2C_SCL_PIN      9
+  #define TP_INT_PIN       4
+  #define TP_RST_PIN      -1
+  #define SCREEN_WIDTH   800
+  #define SCREEN_HEIGHT  480
+  #define TOUCH_I2C_ADDR 0x5D
+  #define HAS_CH422G_IO    0
+#endif
 
 // PCA9685 Definitions
 #define PCA9685_I2C_ADDR 0x40
@@ -105,7 +138,7 @@ unsigned long routineStepTime = 0;
 int routineStepIndex = 0;
 
 // LCD Telemetry & Mascot Animation Variables
-String armStatusMessage = "7.0-Inch 6-DOF Robot Arm Online";
+String armStatusMessage = "Waveshare 7B (1024x600) 6-DOF Arm Online";
 String mascotExpression = "idle"; // idle, happy, shake, star, wink, nod
 unsigned long lastTelemetryUpdate = 0;
 unsigned long lastMascotBlink = 0;
@@ -123,6 +156,184 @@ bool isTouched = false;
 int touchX = 0;
 int touchY = 0;
 unsigned long lastTouchTime = 0;
+
+// Audio Engine State Variables
+bool i2sAudioReady = false;
+int audioVolume = 80; // Default 80% (0 - 100)
+bool audioMuted = false;
+
+// =============================================================================
+// MAX98357A I2S Mono Audio Synthesis & Playback Engine
+// =============================================================================
+void initI2SAudio() {
+  i2s_config_t i2s_config = {
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+    .sample_rate = I2S_SAMPLE_RATE,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+    .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+    .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+    .dma_buf_count = 8,
+    .dma_buf_len = AUDIO_BUF_SIZE,
+    .use_apll = false,
+    .tx_desc_auto_clear = true
+  };
+
+  i2s_pin_config_t pin_config = {
+    .bck_io_num = I2S_BCLK_PIN,
+    .ws_io_num = I2S_LRC_PIN,
+    .data_out_num = I2S_DOUT_PIN,
+    .data_in_num = I2S_PIN_NO_CHANGE
+  };
+
+  esp_err_t err = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
+  if (err == ESP_OK) {
+    i2s_set_pin(I2S_PORT, &pin_config);
+    i2s_zero_dma_buffer(I2S_PORT);
+    i2sAudioReady = true;
+    Serial.println("[MAX98357A] I2S Mono Audio Amplifier Initialized Successfully!");
+  } else {
+    Serial.print("[MAX98357A] I2S Driver Install Failed! Error: ");
+    Serial.println(err);
+  }
+}
+
+void playToneI2S(float freqHz, unsigned long durationMs, float volMult = 1.0f) {
+  if (!i2sAudioReady || freqHz <= 0 || durationMs == 0 || audioMuted || audioVolume <= 0) {
+    delay(durationMs);
+    return;
+  }
+  
+  float actualVol = (audioVolume / 100.0f) * volMult;
+  int16_t maxAmp = (int16_t)(32767.0f * actualVol * 0.45f);
+  
+  unsigned long totalSamples = (unsigned long)((float)I2S_SAMPLE_RATE * (durationMs / 1000.0f));
+  if (totalSamples == 0) totalSamples = 1;
+  
+  int16_t buffer[AUDIO_BUF_SIZE * 2];
+  float phase = 0.0f;
+  float phaseInc = (2.0f * (float)M_PI * freqHz) / (float)I2S_SAMPLE_RATE;
+  
+  unsigned long samplesWritten = 0;
+  while (samplesWritten < totalSamples) {
+    size_t chunkSamples = (totalSamples - samplesWritten > AUDIO_BUF_SIZE) ? AUDIO_BUF_SIZE : (totalSamples - samplesWritten);
+    for (size_t i = 0; i < chunkSamples; i++) {
+      float env = 1.0f;
+      if (samplesWritten + i < 80) {
+        env = (float)(samplesWritten + i) / 80.0f;
+      } else if (totalSamples - (samplesWritten + i) < 80) {
+        env = (float)(totalSamples - (samplesWritten + i)) / 80.0f;
+      }
+      
+      int16_t sample = (int16_t)(sinf(phase) * (float)maxAmp * env);
+      buffer[i * 2]     = sample;
+      buffer[i * 2 + 1] = sample;
+      phase += phaseInc;
+      if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+    }
+    
+    size_t bytesWritten = 0;
+    i2s_write(I2S_PORT, buffer, chunkSamples * 2 * sizeof(int16_t), &bytesWritten, portMAX_DELAY);
+    samplesWritten += chunkSamples;
+  }
+}
+
+void playSweepI2S(float startFreq, float endFreq, unsigned long durationMs, float volMult = 1.0f) {
+  if (!i2sAudioReady || durationMs == 0 || audioMuted || audioVolume <= 0) {
+    delay(durationMs);
+    return;
+  }
+  
+  float actualVol = (audioVolume / 100.0f) * volMult;
+  int16_t maxAmp = (int16_t)(32767.0f * actualVol * 0.45f);
+  
+  unsigned long totalSamples = (unsigned long)((float)I2S_SAMPLE_RATE * (durationMs / 1000.0f));
+  if (totalSamples == 0) totalSamples = 1;
+  
+  int16_t buffer[AUDIO_BUF_SIZE * 2];
+  float phase = 0.0f;
+  
+  unsigned long samplesWritten = 0;
+  while (samplesWritten < totalSamples) {
+    size_t chunkSamples = (totalSamples - samplesWritten > AUDIO_BUF_SIZE) ? AUDIO_BUF_SIZE : (totalSamples - samplesWritten);
+    for (size_t i = 0; i < chunkSamples; i++) {
+      float progress = (float)(samplesWritten + i) / (float)totalSamples;
+      float curFreq = startFreq + progress * (endFreq - startFreq);
+      float phaseInc = (2.0f * (float)M_PI * curFreq) / (float)I2S_SAMPLE_RATE;
+      
+      float env = 1.0f;
+      if (samplesWritten + i < 60) env = (float)(samplesWritten + i) / 60.0f;
+      else if (totalSamples - (samplesWritten + i) < 60) env = (float)(totalSamples - (samplesWritten + i)) / 60.0f;
+      
+      int16_t sample = (int16_t)(sinf(phase) * (float)maxAmp * env);
+      buffer[i * 2]     = sample;
+      buffer[i * 2 + 1] = sample;
+      phase += phaseInc;
+      if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+    }
+    
+    size_t bytesWritten = 0;
+    i2s_write(I2S_PORT, buffer, chunkSamples * 2 * sizeof(int16_t), &bytesWritten, portMAX_DELAY);
+    samplesWritten += chunkSamples;
+  }
+}
+
+// Procedural 6-DOF Robot Arm Sound Effects
+void playServoWhirrSound() {
+  playSweepI2S(720.0f, 1050.0f, 60, 0.6f);
+}
+
+void playClawGrabSound() {
+  playToneI2S(240.0f, 35, 0.85f); // Pneumatic clamp pulse
+  playToneI2S(1400.0f, 15, 0.9f);  // Latch click
+}
+
+void playClawReleaseSound() {
+  playSweepI2S(1600.0f, 600.0f, 50, 0.7f); // Pneumatic pressure release hiss
+}
+
+void playSuccessChime() {
+  float notes[] = {659.25f, 830.61f, 987.77f, 1318.51f}; // E5, G#5, B5, E6
+  int durs[]    = {60, 60, 60, 150};
+  for (int i = 0; i < 4; i++) {
+    playToneI2S(notes[i], durs[i], 0.9f);
+    delay(15);
+  }
+}
+
+void playErrorSound() {
+  playToneI2S(180.0f, 130, 0.95f);
+}
+
+void playFanfareSound() {
+  float notes[] = {523.25f, 659.25f, 783.99f, 1046.5f};
+  for (int i = 0; i < 4; i++) {
+    playToneI2S(notes[i], 70, 0.9f);
+    delay(10);
+  }
+  playToneI2S(1046.5f, 180, 1.0f);
+}
+
+void playCyberBeepSound() {
+  playToneI2S(2400.0f, 30, 0.8f);
+}
+
+void playClickSound() {
+  playToneI2S(1400.0f, 25, 0.7f);
+}
+
+void setAudioVolume(int vol) {
+  audioVolume = constrain(vol, 0, 100);
+  Serial.print("[MAX98357A] Robot Arm Audio Volume set to: ");
+  Serial.print(audioVolume);
+  Serial.println("%");
+}
+
+void setAudioMute(bool mute) {
+  audioMuted = mute;
+  Serial.print("[MAX98357A] Robot Arm Audio Mute: ");
+  Serial.println(audioMuted ? "MUTED" : "UNMUTED");
+}
 
 // =============================================================================
 // PCA9685 Low-Level I2C Functions
@@ -510,7 +721,28 @@ bool readTouch(int &x, int &y) {
 }
 
 // =============================================================================
-// 7-Inch Widescreen Touch Buttons & Telemetry Dashboard Layout
+// Waveshare ESP32-S3-Touch-LCD-7B Onboard IO Expander (CH422G) Driver
+// =============================================================================
+void initIOExpander7B() {
+#if HAS_CH422G_IO
+  // Probes CH422G IO expander addresses (0x24 / 0x38)
+  // EXIO1: TP_RST (1), EXIO2: Backlight DISP (1), EXIO4: SD_CS (1), EXIO5: USB_SEL (0), EXIO6: LCD_VDD_EN (1)
+  uint8_t addrs[] = {0x24, 0x38};
+  for (int i = 0; i < 2; i++) {
+    Wire.beginTransmission(addrs[i]);
+    Wire.write(0x01); // Set IO direction
+    Wire.endTransmission();
+
+    Wire.beginTransmission(addrs[i]);
+    Wire.write(0x02); // Output register
+    Wire.write(0x46); // Bit 1 (TP_RST=1), Bit 2 (DISP=1), Bit 6 (LCD_VDD_EN=1)
+    Wire.endTransmission();
+  }
+#endif
+}
+
+// =============================================================================
+// 7-Inch Widescreen Touch Buttons & Telemetry Dashboard Layout (1024x600 HD)
 // =============================================================================
 struct TouchButton {
   const char* label;
@@ -519,22 +751,45 @@ struct TouchButton {
   uint16_t color;
 };
 
+#if defined(BOARD_ESP32_TOUCH_LCD_7B)
 const TouchButton TOUCH_BTNS[] = {
-  // Column 1: Postures & Routines
+  // Column 1: Postures & Routines (Left Column: X=30, W=175)
+  {"HOME",         30, 105, 175, 65, "home",          0x0284},
+  {"REST",         30, 185, 175, 65, "rest",          0xD5A0},
+  {"REACH",        30, 265, 175, 65, "reach",         0x7BEF},
+  {"HIGH FIVE",    30, 345, 175, 65, "high_five",     0xFD20},
+  {"BOW",          30, 425, 175, 65, "bow",           0x07E0},
+
+  // Column 2: Gestures & Routines (Mid-Left Column: X=225, W=175)
+  {"YES / NOD",   225, 105, 175, 65, "yes",           0x2595},
+  {"NO / SHAKE",  225, 185, 175, 65, "no",            0xFD20},
+  {"WAVE",        225, 265, 175, 65, "wave",          0x04FF},
+  {"DANCE",       225, 345, 175, 65, "dance",         0xF81F},
+  {"STOP",        225, 425, 175, 65, "stop",          0xF800},
+
+  // Column 3: Gripper Controls & Speech Reactivity (Right Column: X=820, W=175)
+  {"OPEN CLAW",   820, 105, 175, 65, "open_gripper",  0x10B9},
+  {"CLOSE CLAW",  820, 185, 175, 65, "close_gripper", 0xEF44},
+  {"SPEED -",     820, 265,  82, 65, "speed_down",    0x3341},
+  {"SPEED +",     913, 265,  82, 65, "speed_up",      0x3341},
+  {"SPEECH: ON",  820, 345, 175, 65, "toggle_speech", 0x05E0},
+  {"TALK TEST",   820, 425, 175, 65, "test_speech",   0x38BD},
+};
+#else
+const TouchButton TOUCH_BTNS[] = {
+  // 800x480 Standard Fallback
   {"HOME",         25,  95, 140, 55, "home",          0x0284},
   {"REST",         25, 160, 140, 55, "rest",          0xD5A0},
   {"REACH",        25, 225, 140, 55, "reach",         0x7BEF},
   {"HIGH FIVE",    25, 290, 140, 55, "high_five",     0xFD20},
   {"BOW",          25, 355, 140, 55, "bow",           0x07E0},
 
-  // Column 2: Gestures & Routines
   {"YES / NOD",   180,  95, 140, 55, "yes",           0x2595},
   {"NO / SHAKE",  180, 160, 140, 55, "no",            0xFD20},
   {"WAVE",        180, 225, 140, 55, "wave",          0x04FF},
   {"DANCE",       180, 290, 140, 55, "dance",         0xF81F},
   {"STOP",        180, 355, 140, 55, "stop",          0xF800},
 
-  // Column 3: Gripper Controls & Speech Reactivity
   {"OPEN CLAW",   635,  95, 140, 55, "open_gripper",  0x10B9},
   {"CLOSE CLAW",  635, 160, 140, 55, "close_gripper", 0xEF44},
   {"SPEED -",     635, 225,  65, 55, "speed_down",    0x3341},
@@ -542,45 +797,59 @@ const TouchButton TOUCH_BTNS[] = {
   {"SPEECH: ON",  635, 290, 140, 55, "toggle_speech", 0x05E0},
   {"TALK TEST",   635, 355, 140, 55, "test_speech",   0x38BD},
 };
+#endif
 const int NUM_TOUCH_BTNS = sizeof(TOUCH_BTNS) / sizeof(TouchButton);
 
 void handleTouchAction(String action) {
+  playClickSound();
+
   if (action == "home") {
     currentRoutine = "idle";
     applyArmHomePosture();
+    playServoWhirrSound();
   } else if (action == "rest") {
     currentRoutine = "idle";
     applyArmRestPosture();
+    playServoWhirrSound();
   } else if (action == "reach") {
     currentRoutine = "idle";
     applyArmReachPosture();
+    playServoWhirrSound();
   } else if (action == "open_gripper") {
     setSingleArmServoAngle(5, 20.0f, 200);
     armStatusMessage = "Gripper Opened";
+    playClawReleaseSound();
   } else if (action == "close_gripper") {
     setSingleArmServoAngle(5, 100.0f, 200);
     armStatusMessage = "Gripper Closed";
+    playClawGrabSound();
   } else if (action == "yes") {
     currentRoutine = "yes"; routineStepIndex = 0;
     armStatusMessage = "Gesture: Yes / Nod";
+    playCyberBeepSound();
   } else if (action == "no") {
     currentRoutine = "no"; routineStepIndex = 0;
     armStatusMessage = "Gesture: No / Shake";
+    playCyberBeepSound();
   } else if (action == "wave") {
     currentRoutine = "wave"; routineStepIndex = 0;
     armStatusMessage = "Gesture: Wave Arm";
+    playCyberBeepSound();
   } else if (action == "high_five") {
     currentRoutine = "high_five"; routineStepIndex = 0;
     armStatusMessage = "Routine: High Five!";
+    playFanfareSound();
   } else if (action == "dance") {
     currentRoutine = "dance"; routineStepIndex = 0;
     armStatusMessage = "Routine: Arm Dance";
+    playFanfareSound();
   } else if (action == "bow") {
     currentRoutine = "idle";
     float bowTargets[6] = {90.0f, 45.0f, 135.0f, 90.0f, 90.0f, 40.0f};
     setArmTargetAngles(bowTargets, 400);
     armStatusMessage = "Gesture: Polite Bow";
     mascotExpression = "happy";
+    playServoWhirrSound();
   } else if (action == "speed_up") {
     if (moveDurationMs > 50) moveDurationMs -= 30;
     armStatusMessage = "Trajectory Speed: " + String(moveDurationMs) + "ms";
@@ -595,6 +864,7 @@ void handleTouchAction(String action) {
     isSpeechActive = true;
     mascotExpression = "nod";
     armStatusMessage = "Testing Speech Gestures...";
+    playSuccessChime();
   } else if (action == "stop") {
     currentRoutine = "idle";
     applyArmHomePosture(200);
@@ -662,6 +932,85 @@ void parseArmCommand(String cmd) {
 
   Serial.print("[Arm CMD Received] ");
   Serial.println(cmd);
+
+  // --- MAX98357A I2S Audio Amplifier Commands ---
+  if (cmd.equalsIgnoreCase("AUDIO:CLAW_GRAB") || cmd.equalsIgnoreCase("AUDIO:CLAW_CLOSE") || cmd.equalsIgnoreCase("PLAY:CLAW_GRAB")) {
+    playClawGrabSound();
+    Serial.println("[MAX98357A] Played Claw Grab Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:CLAW_RELEASE") || cmd.equalsIgnoreCase("AUDIO:CLAW_OPEN") || cmd.equalsIgnoreCase("PLAY:CLAW_RELEASE")) {
+    playClawReleaseSound();
+    Serial.println("[MAX98357A] Played Claw Release Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:SERVO") || cmd.equalsIgnoreCase("PLAY:SERVO")) {
+    playServoWhirrSound();
+    Serial.println("[MAX98357A] Played Servo Whirr");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:CHIME") || cmd.equalsIgnoreCase("PLAY:CHIME") || cmd.equalsIgnoreCase("AUDIO:SUCCESS")) {
+    playSuccessChime();
+    Serial.println("[MAX98357A] Played Success Chime");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:ERROR") || cmd.equalsIgnoreCase("PLAY:ERROR")) {
+    playErrorSound();
+    Serial.println("[MAX98357A] Played Error Warning Buzz");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:FANFARE") || cmd.equalsIgnoreCase("PLAY:FANFARE")) {
+    playFanfareSound();
+    Serial.println("[MAX98357A] Played Fanfare");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:BEEP") || cmd.equalsIgnoreCase("AUDIO:CLICK") || cmd.equalsIgnoreCase("PLAY:BEEP")) {
+    playCyberBeepSound();
+    Serial.println("[MAX98357A] Played Cyber Beep");
+    return;
+  }
+  if (cmd.startsWith("AUDIO:TONE:") || cmd.startsWith("audio:tone:")) {
+    int firstColon = cmd.indexOf(':');
+    int secondColon = cmd.indexOf(':', firstColon + 1);
+    if (secondColon != -1) {
+      float freq = cmd.substring(firstColon + 1, secondColon).toFloat();
+      int dur = cmd.substring(secondColon + 1).toInt();
+      playToneI2S(freq, dur);
+      Serial.println("[MAX98357A] Played Tone " + String(freq) + "Hz for " + String(dur) + "ms");
+      return;
+    }
+  }
+  if (cmd.startsWith("AUDIO:SWEEP:") || cmd.startsWith("audio:sweep:")) {
+    int c1 = cmd.indexOf(':');
+    int c2 = cmd.indexOf(':', c1 + 1);
+    int c3 = cmd.indexOf(':', c2 + 1);
+    if (c1 != -1 && c2 != -1 && c3 != -1) {
+      float startF = cmd.substring(c1 + 1, c2).toFloat();
+      float endF   = cmd.substring(c2 + 1, c3).toFloat();
+      int dur      = cmd.substring(c3 + 1).toInt();
+      playSweepI2S(startF, endF, dur);
+      Serial.println("[MAX98357A] Played Sweep " + String(startF) + "->" + String(endF) + "Hz");
+      return;
+    }
+  }
+  if (cmd.startsWith("AUDIO:VOL:") || cmd.startsWith("audio:vol:") || cmd.startsWith("VOL:") || cmd.startsWith("vol:")) {
+    int colonIdx = cmd.indexOf(':');
+    int vol = cmd.substring(colonIdx + 1).toInt();
+    setAudioVolume(vol);
+    return;
+  }
+  if (cmd.startsWith("AUDIO:MUTE:") || cmd.startsWith("audio:mute:") || cmd.equalsIgnoreCase("AUDIO:MUTE") || cmd.equalsIgnoreCase("MUTE")) {
+    int colonIdx = cmd.indexOf(':');
+    if (colonIdx != -1) {
+      String mStr = cmd.substring(colonIdx + 1);
+      mStr.toUpperCase();
+      mStr.trim();
+      setAudioMute(mStr == "1" || mStr == "ON" || mStr == "TRUE");
+    } else {
+      setAudioMute(!audioMuted);
+    }
+    return;
+  }
 
   // 1. Direct Servo Command: "SERVO:<chan>:<deg>" or "S:<chan>:<deg>"
   if (cmd.startsWith("SERVO:") || cmd.startsWith("servo:") || cmd.startsWith("S:") || cmd.startsWith("s:")) {
@@ -818,8 +1167,9 @@ void setup() {
   while (!Serial && millis() < 2000);
 
   Serial.println("==========================================================");
-  Serial.println("🦾 ESP32-S3 7.0-Inch Capacitive Touchscreen 6-DOF Robot Arm");
-  Serial.println("Display: 800x480 Widescreen RGB | Touch: GT911 Capacitive");
+  Serial.println("🦾 Waveshare ESP32-S3-Touch-LCD-7B 6-DOF Robot Arm");
+  Serial.println("Display: 1024x600 HD Widescreen RGB | Touch: GT911 Capacitive");
+  Serial.println("IO Expander: CH422G (Backlight DISP & Power Control)");
   Serial.println("Telemetry: Live 6-Joint Angles, 3D Cartesian IK & FK Engine");
   Serial.println("Animation: Real-Time Multi-Link Kinematic Simulation & Mascot");
   Serial.println("I2C Bus: SDA=GPIO 8, SCL=GPIO 9 | PCA9685 Driver (0x40)");
@@ -828,6 +1178,12 @@ void setup() {
   // Initialize I2C Bus on 7-inch Touch LCD pins (SDA=GPIO 8, SCL=GPIO 9)
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000); // 400kHz Fast I2C
+
+  // Initialize MAX98357A I2S Audio Amplifier (BCLK=19, LRC=20, DIN=21)
+  initI2SAudio();
+
+  // Initialize Waveshare 7B Onboard IO Expander (CH422G for Backlight & Power)
+  initIOExpander7B();
 
   // Initialize PCA9685 Servo Driver
   initPCA9685();
@@ -839,6 +1195,9 @@ void setup() {
 
   // Set default initial position (Home posture)
   applyArmHomePosture(500);
+
+  // Play startup success chime
+  playSuccessChime();
 
   Serial.println("[Robot Arm] 6 Servos Initialized to Home Position.");
   Serial.println("==========================================================");

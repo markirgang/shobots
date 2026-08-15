@@ -12,6 +12,7 @@ This document describes the hardware configuration, pinout mapping, wiring diagr
 | **Touch Controller** | None | **GT911 5-Point Capacitive Multi-Touch (I2C: `0x5D`)** |
 | **Onboard Controls** | None | **800x480 Widescreen Touch Buttons (Stand, Walk, Dance, etc.)** |
 | **Telemetry & Visuals** | Serial logs | **Live Telemetry, Joint Angles, Speed & Animated Robot Face** |
+| **Audio Output** | None | **MAX98357A I2S Mono Audio Amplifier (BCLK=19, LRC=20, DIN=21)** |
 | **Microcontroller** | ESP32-WROOM | **ESP32-S3-WROOM-1 (16MB Flash, 8MB Octal PSRAM)** |
 | **I2C Bus for Servos** | GPIO 21 / 22 | **GPIO 8 (SDA) / GPIO 9 (SCL) via PH2.0 4-Pin I2C Header** |
 
@@ -33,7 +34,29 @@ Connect the external Dual PCA9685 servo drivers to the **ESP32-S3-Touch-LCD-7** 
 > [!IMPORTANT]
 > **Power Isolation**: Do **NOT** power the 18 servo motors from the ESP32 3.3V or 5V regulator. Connect an external 5V–6V high-current power supply (or 2S LiPo battery with 5V/6V step-down UBEC) to the **V+** terminal of the PCA9685 drivers and ensure **GND** is common.
 
-### B. Onboard 7-Inch Display & Touch Controller Pinout (Waveshare 7" / 7B)
+### B. MAX98357A I2S Mono Audio Amplifier Wiring
+
+Connect the **MAX98357A I2S Mono Class-D Audio Amplifier** module:
+
+```
+[ Waveshare ESP32-S3-Touch-LCD-7 ]             [ MAX98357A I2S Amp ]
+  ├── 5V (or 3.3V) ───────────────────────────────> VIN (5V recommended for 3.2W)
+  ├── GND ────────────────────────────────────────> GND
+  ├── GPIO 19 (I2S BCLK) ─────────────────────────> BCLK
+  ├── GPIO 20 (I2S LRC / WS) ─────────────────────> LRC
+  └── GPIO 21 (I2S DOUT) ─────────────────────────> DIN
+                                                    GAIN ───> Open (9dB Default) or GND (6dB)
+                                                    SD_MODE > Open / Float (L+R Mono Mix)
+                                                    [ + / - ] ──> 4Ω - 8Ω 2W-3W Speaker
+```
+
+| Signal | ESP32-S3 Pin | Description |
+| :--- | :--- | :--- |
+| **I2S BCLK** | **GPIO 19** | Bit Clock (BCK) |
+| **I2S LRC** | **GPIO 20** | Word Select (WS / LRCLK) |
+| **I2S DOUT** | **GPIO 21** | Serial Data (DIN on MAX98357A) |
+
+### C. Onboard 7-Inch Display & Touch Controller Pinout (Waveshare 7" / 7B)
 
 | Function | ESP32-S3 Pin | Description |
 | :--- | :--- | :--- |
@@ -95,3 +118,25 @@ Connect the external Dual PCA9685 servo drivers to the **ESP32-S3-Touch-LCD-7** 
 
 - **Direct Widescreen Touch**: Tap any button on the 800x480 touchscreen (`STAND`, `SIT`, `FLAT`, `BOW`, `WALK`, `RUN`, `DANCE`, `WAVE LEFT`, `WAVE RIGHT`, `TURN LEFT`, `TURN RIGHT`, `STOP`, `SPEED +/-`).
 - **Python GUI / Gemini AI**: Connect via Bluetooth (`hexapod-touch-7` or USB COM port) and control verbally or via GUI sliders in `main.py`.
+
+---
+
+## 6. Serial & Audio Command Protocol
+
+| Command Format | Example | Description |
+| :--- | :--- | :--- |
+| `HEX:<action>` | `HEX:walk` / `HEX:stand` | Postures and gaits (`stand`, `sit`, `flat`, `bow`, `walk`, `run`, `dance`, `wave_left`, `wave_right`, `turn_left`, `turn_right`, `stop`) |
+| `HEX:SERVO:<d>:<ch>:<deg>` | `HEX:SERVO:1:0:90` | Direct servo positioning on Driver `d` (1 or 2), Channel `ch` (0..8) |
+| `HEX:IK:<leg>:<X>:<Y>:<Z>:<ms>` | `HEX:IK:FL:0:80:-60:200` | 3D Inverse Kinematics coordinate target for leg (`FL`, `ML`, `RL`, `FR`, `MR`, `RR`) |
+| `HEX:SPEED:<ms>` | `HEX:SPEED:150` | Sets interpolation transition duration in ms |
+| `AUDIO:STEP` / `PLAY:STEP` | `AUDIO:STEP` | Plays mechanical footstep thud and joint actuation click |
+| `AUDIO:STARTUP` | `AUDIO:STARTUP` | Plays sci-fi robotic power-up sweep |
+| `AUDIO:SHUTDOWN` | `AUDIO:SHUTDOWN` | Plays descending power-down sweep |
+| `AUDIO:ALERT` | `AUDIO:ALERT` | Plays dual-tone emergency alert siren |
+| `AUDIO:DANCE` | `AUDIO:DANCE` | Plays upbeat 8-bit techno rhythm |
+| `AUDIO:R2D2` | `AUDIO:R2D2` | Plays expressive droid robotic chatter vocalization |
+| `AUDIO:SERVO` | `AUDIO:SERVO` | Plays hydraulic servo whine sound |
+| `AUDIO:CLICK` | `AUDIO:CLICK` | Plays UI button click feedback tone |
+| `AUDIO:TONE:<f>:<ms>` | `AUDIO:TONE:1000:150` | Plays sine tone at frequency `f` (Hz) for `ms` |
+| `AUDIO:VOL:<0-100>` | `AUDIO:VOL:85` | Sets MAX98357A audio amplifier volume percentage |
+| `AUDIO:MUTE:<1\|0>` | `AUDIO:MUTE:1` | Mutes or unmutes audio output |

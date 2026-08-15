@@ -33,6 +33,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <math.h>
+#include "driver/i2s.h"
 
 #if defined(CONFIG_BT_ENABLED) && !defined(CONFIG_IDF_TARGET_ESP32S3)
 #include <BluetoothSerial.h>
@@ -41,6 +42,22 @@ BluetoothSerial SerialBT;
 #else
 #define HAS_BT_CLASSIC 0
 #endif
+
+// =============================================================================
+// MAX98357A I2S Mono Audio Amplifier Pinout & Configuration
+// =============================================================================
+#ifndef I2S_BCLK_PIN
+#define I2S_BCLK_PIN          19   // I2S Bit Clock (BCLK / BCK)
+#endif
+#ifndef I2S_LRC_PIN
+#define I2S_LRC_PIN           20   // I2S Word Select / Left-Right Clock (LRC / WS)
+#endif
+#ifndef I2S_DOUT_PIN
+#define I2S_DOUT_PIN          21   // I2S Serial Data Out (DIN on MAX98357A)
+#endif
+#define I2S_PORT              I2S_NUM_0
+#define I2S_SAMPLE_RATE       22050
+#define AUDIO_BUF_SIZE        256
 
 // =============================================================================
 // Hardware Profile Selection
@@ -161,11 +178,188 @@ unsigned long lastSpeechEyeToggle = 0;
 bool speechEyeState = false;
 unsigned long lastSpeechSwayTime = 0;
 
-// Touch State
-bool isTouched = false;
-int touchX = 0;
-int touchY = 0;
-unsigned long lastTouchTime = 0;
+// Audio Engine State Variables
+bool i2sAudioReady = false;
+int audioVolume = 80; // Default 80% (0 - 100)
+bool audioMuted = false;
+
+// =============================================================================
+// MAX98357A I2S Mono Audio Synthesis & Playback Engine
+// =============================================================================
+void initI2SAudio() {
+  i2s_config_t i2s_config = {
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+    .sample_rate = I2S_SAMPLE_RATE,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+    .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+    .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+    .dma_buf_count = 8,
+    .dma_buf_len = AUDIO_BUF_SIZE,
+    .use_apll = false,
+    .tx_desc_auto_clear = true
+  };
+
+  i2s_pin_config_t pin_config = {
+    .bck_io_num = I2S_BCLK_PIN,
+    .ws_io_num = I2S_LRC_PIN,
+    .data_out_num = I2S_DOUT_PIN,
+    .data_in_num = I2S_PIN_NO_CHANGE
+  };
+
+  esp_err_t err = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
+  if (err == ESP_OK) {
+    i2s_set_pin(I2S_PORT, &pin_config);
+    i2s_zero_dma_buffer(I2S_PORT);
+    i2sAudioReady = true;
+    Serial.println("[MAX98357A] I2S Mono Audio Amplifier Initialized Successfully!");
+  } else {
+    Serial.print("[MAX98357A] I2S Driver Install Failed! Error: ");
+    Serial.println(err);
+  }
+}
+
+void playToneI2S(float freqHz, unsigned long durationMs, float volMult = 1.0f) {
+  if (!i2sAudioReady || freqHz <= 0 || durationMs == 0 || audioMuted || audioVolume <= 0) {
+    delay(durationMs);
+    return;
+  }
+  
+  float actualVol = (audioVolume / 100.0f) * volMult;
+  int16_t maxAmp = (int16_t)(32767.0f * actualVol * 0.45f);
+  
+  unsigned long totalSamples = (unsigned long)((float)I2S_SAMPLE_RATE * (durationMs / 1000.0f));
+  if (totalSamples == 0) totalSamples = 1;
+  
+  int16_t buffer[AUDIO_BUF_SIZE * 2];
+  float phase = 0.0f;
+  float phaseInc = (2.0f * (float)M_PI * freqHz) / (float)I2S_SAMPLE_RATE;
+  
+  unsigned long samplesWritten = 0;
+  while (samplesWritten < totalSamples) {
+    size_t chunkSamples = (totalSamples - samplesWritten > AUDIO_BUF_SIZE) ? AUDIO_BUF_SIZE : (totalSamples - samplesWritten);
+    for (size_t i = 0; i < chunkSamples; i++) {
+      float env = 1.0f;
+      if (samplesWritten + i < 80) {
+        env = (float)(samplesWritten + i) / 80.0f;
+      } else if (totalSamples - (samplesWritten + i) < 80) {
+        env = (float)(totalSamples - (samplesWritten + i)) / 80.0f;
+      }
+      
+      int16_t sample = (int16_t)(sinf(phase) * (float)maxAmp * env);
+      buffer[i * 2]     = sample;
+      buffer[i * 2 + 1] = sample;
+      phase += phaseInc;
+      if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+    }
+    
+    size_t bytesWritten = 0;
+    i2s_write(I2S_PORT, buffer, chunkSamples * 2 * sizeof(int16_t), &bytesWritten, portMAX_DELAY);
+    samplesWritten += chunkSamples;
+  }
+}
+
+void playSweepI2S(float startFreq, float endFreq, unsigned long durationMs, float volMult = 1.0f) {
+  if (!i2sAudioReady || durationMs == 0 || audioMuted || audioVolume <= 0) {
+    delay(durationMs);
+    return;
+  }
+  
+  float actualVol = (audioVolume / 100.0f) * volMult;
+  int16_t maxAmp = (int16_t)(32767.0f * actualVol * 0.45f);
+  
+  unsigned long totalSamples = (unsigned long)((float)I2S_SAMPLE_RATE * (durationMs / 1000.0f));
+  if (totalSamples == 0) totalSamples = 1;
+  
+  int16_t buffer[AUDIO_BUF_SIZE * 2];
+  float phase = 0.0f;
+  
+  unsigned long samplesWritten = 0;
+  while (samplesWritten < totalSamples) {
+    size_t chunkSamples = (totalSamples - samplesWritten > AUDIO_BUF_SIZE) ? AUDIO_BUF_SIZE : (totalSamples - samplesWritten);
+    for (size_t i = 0; i < chunkSamples; i++) {
+      float progress = (float)(samplesWritten + i) / (float)totalSamples;
+      float curFreq = startFreq + progress * (endFreq - startFreq);
+      float phaseInc = (2.0f * (float)M_PI * curFreq) / (float)I2S_SAMPLE_RATE;
+      
+      float env = 1.0f;
+      if (samplesWritten + i < 60) env = (float)(samplesWritten + i) / 60.0f;
+      else if (totalSamples - (samplesWritten + i) < 60) env = (float)(totalSamples - (samplesWritten + i)) / 60.0f;
+      
+      int16_t sample = (int16_t)(sinf(phase) * (float)maxAmp * env);
+      buffer[i * 2]     = sample;
+      buffer[i * 2 + 1] = sample;
+      phase += phaseInc;
+      if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+    }
+    
+    size_t bytesWritten = 0;
+    i2s_write(I2S_PORT, buffer, chunkSamples * 2 * sizeof(int16_t), &bytesWritten, portMAX_DELAY);
+    samplesWritten += chunkSamples;
+  }
+}
+
+// Procedural Hexapod Sound Effects
+void playStepSound() {
+  playSweepI2S(140.0f, 60.0f, 25, 0.95f); // Low mechanical footstep impact
+  playToneI2S(850.0f, 12, 0.6f);          // Joint click
+}
+
+void playServoWhineSound() {
+  playSweepI2S(680.0f, 920.0f, 70, 0.6f);
+}
+
+void playStartupSound() {
+  playSweepI2S(200.0f, 1800.0f, 280, 0.9f);
+  delay(15);
+  playToneI2S(1800.0f, 90, 0.8f);
+}
+
+void playShutdownSound() {
+  playSweepI2S(1600.0f, 120.0f, 320, 0.85f);
+}
+
+void playAlertSound() {
+  for (int i = 0; i < 3; i++) {
+    playToneI2S(1200.0f, 70, 0.95f);
+    delay(15);
+    playToneI2S(880.0f, 70, 0.95f);
+    delay(15);
+  }
+}
+
+void playDanceSound() {
+  float notes[] = {523.25f, 659.25f, 783.99f, 1046.5f, 880.0f, 659.25f, 1046.5f};
+  int durs[]    = {60, 60, 60, 100, 60, 60, 140};
+  for (int i = 0; i < 7; i++) {
+    playToneI2S(notes[i], durs[i], 0.85f);
+    delay(15);
+  }
+}
+
+void playR2D2Sound() {
+  playSweepI2S(900.0f, 2200.0f, 45, 0.85f);
+  playToneI2S(1800.0f, 30, 0.8f);
+  playSweepI2S(2200.0f, 1100.0f, 50, 0.85f);
+  playSweepI2S(1300.0f, 2400.0f, 60, 0.9f);
+}
+
+void playClickSound() {
+  playToneI2S(1400.0f, 25, 0.7f);
+}
+
+void setAudioVolume(int vol) {
+  audioVolume = constrain(vol, 0, 100);
+  Serial.print("[MAX98357A] Hexapod Audio Volume set to: ");
+  Serial.print(audioVolume);
+  Serial.println("%");
+}
+
+void setAudioMute(bool mute) {
+  audioMuted = mute;
+  Serial.print("[MAX98357A] Hexapod Audio Mute: ");
+  Serial.println(audioMuted ? "MUTED" : "UNMUTED");
+}
 
 // =============================================================================
 // Helper Functions: Leg Index Mapping
@@ -402,6 +596,7 @@ void updateGaitEngine() {
       targets[getServoIndex(1, 0)] = 60.0f;
       targets[getServoIndex(5, 0)] = 60.0f;
       gaitStepIndex = 1;
+      playStepSound();
     } else if (gaitStepIndex == 1) {
       targets[getServoIndex(0, 1)] = 90.0f;
       targets[getServoIndex(4, 1)] = 90.0f;
@@ -419,6 +614,7 @@ void updateGaitEngine() {
       targets[getServoIndex(4, 0)] = 60.0f;
       targets[getServoIndex(2, 0)] = 60.0f;
       gaitStepIndex = 3;
+      playStepSound();
     } else {
       targets[getServoIndex(3, 1)] = 90.0f;
       targets[getServoIndex(1, 1)] = 90.0f;
@@ -434,6 +630,7 @@ void updateGaitEngine() {
       for (int l = 0; l < 3; l++) targets[getServoIndex(l, 1)] = 60.0f;
       for (int l = 3; l < 6; l++) targets[getServoIndex(l, 1)] = 120.0f;
       gaitStepIndex = 1;
+      playDanceSound();
     } else {
       for (int l = 0; l < 3; l++) targets[getServoIndex(l, 1)] = 120.0f;
       for (int l = 3; l < 6; l++) targets[getServoIndex(l, 1)] = 60.0f;
@@ -642,15 +839,20 @@ const TouchButton TOUCH_BTNS[] = {
 const int NUM_TOUCH_BTNS = sizeof(TOUCH_BTNS) / sizeof(TouchButton);
 
 void handleTouchAction(String action) {
+  playClickSound();
+
   if (action == "stand") {
     currentGait = "idle";
     applyStandPosture();
+    playServoWhineSound();
   } else if (action == "sit") {
     currentGait = "idle";
     applySitPosture();
+    playServoWhineSound();
   } else if (action == "flat") {
     currentGait = "idle";
     applyFlatPosture();
+    playServoWhineSound();
   } else if (action == "walk") {
     currentGait = "walk";
     lastActionName = "WALK";
@@ -666,15 +868,19 @@ void handleTouchAction(String action) {
     lastActionName = "DANCE";
     lcdStatusMessage = "Routine: Dance";
     gaitStepIndex = 0;
+    playDanceSound();
   } else if (action == "bow") {
     currentGait = "idle";
     applyBowPosture();
+    playServoWhineSound();
   } else if (action == "wave" || action == "wave_right") {
     currentGait = "idle";
     applyWavePosture(true);
+    playServoWhineSound();
   } else if (action == "wave_left") {
     currentGait = "idle";
     applyWavePosture(false);
+    playServoWhineSound();
   } else if (action == "turn_left") {
     lastActionName = "TURN L";
     lcdStatusMessage = "Turning Left";
@@ -694,6 +900,7 @@ void handleTouchAction(String action) {
     lastSpeechTime = millis();
     isSpeechActive = true;
     lcdStatusMessage = "Testing Speech Reactivity...";
+    playR2D2Sound();
   } else if (action == "stop") {
     currentGait = "idle";
     applyStandPosture(200);
@@ -736,6 +943,90 @@ void parseCommand(String cmd) {
 
   Serial.print("[Hexapod CMD] ");
   Serial.println(cmd);
+
+  // --- MAX98357A I2S Audio Amplifier Commands ---
+  if (cmd.equalsIgnoreCase("AUDIO:STEP") || cmd.equalsIgnoreCase("PLAY:STEP")) {
+    playStepSound();
+    Serial.println("[MAX98357A] Played Hexapod Step Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:STARTUP") || cmd.equalsIgnoreCase("PLAY:STARTUP")) {
+    playStartupSound();
+    Serial.println("[MAX98357A] Played Hexapod Startup Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:SHUTDOWN") || cmd.equalsIgnoreCase("PLAY:SHUTDOWN")) {
+    playShutdownSound();
+    Serial.println("[MAX98357A] Played Hexapod Shutdown Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:ALERT") || cmd.equalsIgnoreCase("PLAY:ALERT")) {
+    playAlertSound();
+    Serial.println("[MAX98357A] Played Hexapod Alert Siren");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:DANCE") || cmd.equalsIgnoreCase("PLAY:DANCE")) {
+    playDanceSound();
+    Serial.println("[MAX98357A] Played Hexapod Dance Track");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:R2D2") || cmd.equalsIgnoreCase("PLAY:R2D2") || cmd.equalsIgnoreCase("AUDIO:CHIRP")) {
+    playR2D2Sound();
+    Serial.println("[MAX98357A] Played Hexapod Droid Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:CLICK") || cmd.equalsIgnoreCase("AUDIO:BEEP") || cmd.equalsIgnoreCase("PLAY:CLICK")) {
+    playClickSound();
+    Serial.println("[MAX98357A] Played Click Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:SERVO") || cmd.equalsIgnoreCase("PLAY:SERVO")) {
+    playServoWhineSound();
+    Serial.println("[MAX98357A] Played Servo Whine");
+    return;
+  }
+  if (cmd.startsWith("AUDIO:TONE:") || cmd.startsWith("audio:tone:")) {
+    int firstColon = cmd.indexOf(':');
+    int secondColon = cmd.indexOf(':', firstColon + 1);
+    if (secondColon != -1) {
+      float freq = cmd.substring(firstColon + 1, secondColon).toFloat();
+      int dur = cmd.substring(secondColon + 1).toInt();
+      playToneI2S(freq, dur);
+      Serial.println("[MAX98357A] Played Tone " + String(freq) + "Hz for " + String(dur) + "ms");
+      return;
+    }
+  }
+  if (cmd.startsWith("AUDIO:SWEEP:") || cmd.startsWith("audio:sweep:")) {
+    int c1 = cmd.indexOf(':');
+    int c2 = cmd.indexOf(':', c1 + 1);
+    int c3 = cmd.indexOf(':', c2 + 1);
+    if (c1 != -1 && c2 != -1 && c3 != -1) {
+      float startF = cmd.substring(c1 + 1, c2).toFloat();
+      float endF   = cmd.substring(c2 + 1, c3).toFloat();
+      int dur      = cmd.substring(c3 + 1).toInt();
+      playSweepI2S(startF, endF, dur);
+      Serial.println("[MAX98357A] Played Sweep " + String(startF) + "->" + String(endF) + "Hz");
+      return;
+    }
+  }
+  if (cmd.startsWith("AUDIO:VOL:") || cmd.startsWith("audio:vol:") || cmd.startsWith("VOL:") || cmd.startsWith("vol:")) {
+    int colonIdx = cmd.indexOf(':');
+    int vol = cmd.substring(colonIdx + 1).toInt();
+    setAudioVolume(vol);
+    return;
+  }
+  if (cmd.startsWith("AUDIO:MUTE:") || cmd.startsWith("audio:mute:") || cmd.equalsIgnoreCase("AUDIO:MUTE") || cmd.equalsIgnoreCase("MUTE")) {
+    int colonIdx = cmd.indexOf(':');
+    if (colonIdx != -1) {
+      String mStr = cmd.substring(colonIdx + 1);
+      mStr.toUpperCase();
+      mStr.trim();
+      setAudioMute(mStr == "1" || mStr == "ON" || mStr == "TRUE");
+    } else {
+      setAudioMute(!audioMuted);
+    }
+    return;
+  }
 
   // 1. Direct Servo Command: "HEX:SERVO:<driver>:<chan>:<deg>"
   if (cmd.startsWith("HEX:SERVO:") || cmd.startsWith("hex:servo:")) {
@@ -916,6 +1207,9 @@ void setup() {
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000); // 400kHz Fast I2C
 
+  // Initialize MAX98357A I2S Audio Amplifier (BCLK=19, LRC=20, DIN=21)
+  initI2SAudio();
+
   // Initialize Dual PCA9685 Servo Drivers
   initPCA9685(PCA9685_ADDR_LEFT);
   initPCA9685(PCA9685_ADDR_RIGHT);
@@ -941,6 +1235,9 @@ void setup() {
     targetAngles[i]  = 90.0f;
     writeHardwareAngle(i, 90.0f);
   }
+
+  // Play startup sound
+  playStartupSound();
 
   applyStandPosture(300);
   Serial.println("[Hexapod] 18 Servos Initialized to 90 Deg Stand Posture.");

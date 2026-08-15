@@ -48,9 +48,14 @@ are routed through the ESP32-S3 screen. The ESP32 manages the WiFi connection an
 ### 3. Dual-Channel Host Serial Protocol
 - USB CDC Serial (115200 baud) and Bluetooth Classic / BLE for PC Thinker Window and Gemini AI integration.
 
+### 4. MAX98357A I2S Mono Audio Amplifier Subsystem
+- Real-time procedural audio synthesis engine for flight sound effects (Turbine takeoff spool-up, Landing spool-down & touchdown, Aerodynamic flip whooshes, HUD radar pings, Low battery alarms, Emergency sirens, and touch clicks).
+
 ---
 
 ## 🔌 Hardware Pinout (Waveshare ESP32-S3-Touch-LCD-7)
+
+### A. Core Interface Pinout
 
 | Function | Pin / GPIO | Description |
 | :--- | :--- | :--- |
@@ -59,7 +64,24 @@ are routed through the ESP32-S3 screen. The ESP32 manages the WiFi connection an
 | **TP_INT** | `GPIO 4` | GT911 Touch Interrupt |
 | **TP_RST** | `CH422G / Direct` | Touch Reset Line |
 | **LCD RGB** | `RGB565 / ST7262` | 800x480 7.0-inch 16-bit parallel interface |
+| **I2S BCLK** | `GPIO 19` | I2S Bit Clock to MAX98357A |
+| **I2S LRC** | `GPIO 20` | I2S Word Select (WS/LRC) to MAX98357A |
+| **I2S DOUT** | `GPIO 21` | I2S Serial Data Out (DIN) to MAX98357A |
 | **USB CDC** | `USB Native / Type-C` | Host Serial PC Link (115200 baud) |
+
+### B. MAX98357A I2S Audio Amplifier Wiring
+
+```
+[ Waveshare ESP32-S3-Touch-LCD-7 ]             [ MAX98357A I2S Amp ]
+  ├── 5V (or 3.3V) ───────────────────────────────> VIN (5V recommended for 3.2W)
+  ├── GND ────────────────────────────────────────> GND
+  ├── GPIO 19 (I2S BCLK) ─────────────────────────> BCLK
+  ├── GPIO 20 (I2S LRC / WS) ─────────────────────> LRC
+  └── GPIO 21 (I2S DOUT) ─────────────────────────> DIN
+                                                    GAIN ───> Open (9dB Default) or GND (6dB)
+                                                    SD_MODE > Open / Float (L+R Mono Mix)
+                                                    [ + / - ] ──> 4Ω - 8Ω 2W-3W Speaker
+```
 
 ---
 
@@ -100,3 +122,14 @@ are routed through the ESP32-S3 screen. The ESP32 manages the WiFi connection an
 | `TELLO:flip <dir>` | `TELLO:flip f` | Perform flip (`f`, `b`, `l`, `r`) |
 | `ROUTINE:<name>` | `ROUTINE:SQUARE` | Start autonomous choreography routine (`square`, `scan360`, `bounce`) |
 | `status` / `ping` | `status` | Query current flight state, battery, and altitude |
+| `AUDIO:TAKEOFF` / `PLAY:TAKEOFF` | `AUDIO:TAKEOFF` | Plays turbine spool-up frequency sweep sound |
+| `AUDIO:LAND` / `PLAY:LAND` | `AUDIO:LAND` | Plays descending spool-down + touchdown sound |
+| `AUDIO:FLIP` / `PLAY:FLIP` | `AUDIO:FLIP` | Plays high-speed aerodynamic flip whoosh |
+| `AUDIO:RADAR` / `PLAY:RADAR` | `AUDIO:RADAR` | Plays HUD radar sonar ping resonance |
+| `AUDIO:ALARM` / `PLAY:ALARM` | `AUDIO:ALARM` | Plays low battery warning beep sequence |
+| `AUDIO:SIREN` / `PLAY:SIREN` | `AUDIO:SIREN` | Plays emergency siren sweep |
+| `AUDIO:CONNECT` / `PLAY:CONNECT` | `AUDIO:CONNECT` | Plays WiFi connection handshake chime |
+| `AUDIO:CLICK` / `PLAY:CLICK` | `AUDIO:CLICK` | Plays UI button click tone |
+| `AUDIO:TONE:<f>:<ms>` | `AUDIO:TONE:1000:100` | Plays sine tone at frequency `f` (Hz) for `ms` |
+| `AUDIO:VOL:<0-100>` | `AUDIO:VOL:80` | Sets MAX98357A audio volume percentage |
+| `AUDIO:MUTE:<1\|0>` | `AUDIO:MUTE:1` | Mutes or unmutes audio output |

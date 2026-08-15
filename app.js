@@ -746,6 +746,28 @@ async function connectSession() {
                     },
                     required: ["device_name", "state"]
                   }
+                },
+                {
+                  name: "play_hardware_sound",
+                  description: "Plays procedural audio sound effects on the MAX98357A I2S Audio Amplifier attached to any of the 4 ESP32-S3 Touchscreen hardware boards: 'birds' (chirp, squawk, trill, melody, symphony, beep), 'hexapod' (step, startup, shutdown, alert, dance, r2d2, servo, click), 'arm' (claw_grab, claw_release, servo, chime, error, fanfare, beep), or 'tello'/'drone' (takeoff, land, flip, radar, alarm, siren, connect).",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      device: {
+                        type: "STRING",
+                        description: "Target hardware device: 'birds', 'hexapod', 'arm', 'drone' (or 'tello')."
+                      },
+                      sound: {
+                        type: "STRING",
+                        description: "Sound name to play (e.g. 'chirp', 'squawk', 'step', 'startup', 'claw_grab', 'chime', 'takeoff', 'land', 'flip', 'radar', 'fanfare', etc.)."
+                      },
+                      volume: {
+                        type: "INTEGER",
+                        description: "Optional volume percentage (0 to 100)."
+                      }
+                    },
+                    required: ["device", "sound"]
+                  }
                 }
               ]
             }
@@ -861,6 +883,16 @@ async function connectSession() {
               result = { status: "success", action: action, device: "ESP-32-Touch-LCD" };
               appendSystemMessage(`[ESP-32-Touch-LCD Hexapod] Executed action: ${action}`);
             }
+          } else if (fc.name === "play_hardware_sound") {
+            const device = (fc.args.device || "birds").toLowerCase();
+            const sound = (fc.args.sound || "chirp").toLowerCase();
+            const volume = fc.args.volume;
+            if (volume !== undefined && volume !== null) {
+              writeSerialCommand(`AUDIO:VOL:${parseInt(volume)}\n`);
+            }
+            writeSerialCommand(`AUDIO:${sound.toUpperCase()}\n`);
+            result = { status: "success", device: device, sound: sound, hardware: "MAX98357A I2S" };
+            appendSystemMessage(`[MAX98357A I2S Audio] Played ${sound.toUpperCase()} on ${device.toUpperCase()}`);
           }
           
           functionResponses.push({

@@ -49,6 +49,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <math.h>
+#include "driver/i2s.h"
 
 #if defined(CONFIG_BT_ENABLED) && !defined(CONFIG_IDF_TARGET_ESP32S3)
 #include <BluetoothSerial.h>
@@ -57,6 +58,22 @@ BluetoothSerial SerialBT;
 #else
 #define HAS_BT_CLASSIC 0
 #endif
+
+// =============================================================================
+// MAX98357A I2S Mono Audio Amplifier Pinout & Configuration
+// =============================================================================
+#ifndef I2S_BCLK_PIN
+#define I2S_BCLK_PIN          19   // I2S Bit Clock (BCLK / BCK)
+#endif
+#ifndef I2S_LRC_PIN
+#define I2S_LRC_PIN           20   // I2S Word Select / Left-Right Clock (LRC / WS)
+#endif
+#ifndef I2S_DOUT_PIN
+#define I2S_DOUT_PIN          21   // I2S Serial Data Out (DIN on MAX98357A)
+#endif
+#define I2S_PORT              I2S_NUM_0
+#define I2S_SAMPLE_RATE       22050
+#define AUDIO_BUF_SIZE        256
 
 // =============================================================================
 // Hardware Configuration & Pinout
@@ -117,6 +134,185 @@ DroneTelemetry telemetry;
 
 // Movement step distance preset in centimeters (20, 50, 100)
 int currentStepDistCm = 20;
+
+// Audio Engine State Variables
+bool i2sAudioReady = false;
+int audioVolume = 80; // Default 80% (0 - 100)
+bool audioMuted = false;
+
+// =============================================================================
+// MAX98357A I2S Mono Audio Synthesis & Playback Engine
+// =============================================================================
+void initI2SAudio() {
+  i2s_config_t i2s_config = {
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+    .sample_rate = I2S_SAMPLE_RATE,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+    .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+    .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+    .dma_buf_count = 8,
+    .dma_buf_len = AUDIO_BUF_SIZE,
+    .use_apll = false,
+    .tx_desc_auto_clear = true
+  };
+
+  i2s_pin_config_t pin_config = {
+    .bck_io_num = I2S_BCLK_PIN,
+    .ws_io_num = I2S_LRC_PIN,
+    .data_out_num = I2S_DOUT_PIN,
+    .data_in_num = I2S_PIN_NO_CHANGE
+  };
+
+  esp_err_t err = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
+  if (err == ESP_OK) {
+    i2s_set_pin(I2S_PORT, &pin_config);
+    i2s_zero_dma_buffer(I2S_PORT);
+    i2sAudioReady = true;
+    Serial.println("[MAX98357A] I2S Mono Audio Amplifier Initialized Successfully!");
+  } else {
+    Serial.print("[MAX98357A] I2S Driver Install Failed! Error: ");
+    Serial.println(err);
+  }
+}
+
+void playToneI2S(float freqHz, unsigned long durationMs, float volMult = 1.0f) {
+  if (!i2sAudioReady || freqHz <= 0 || durationMs == 0 || audioMuted || audioVolume <= 0) {
+    delay(durationMs);
+    return;
+  }
+  
+  float actualVol = (audioVolume / 100.0f) * volMult;
+  int16_t maxAmp = (int16_t)(32767.0f * actualVol * 0.45f);
+  
+  unsigned long totalSamples = (unsigned long)((float)I2S_SAMPLE_RATE * (durationMs / 1000.0f));
+  if (totalSamples == 0) totalSamples = 1;
+  
+  int16_t buffer[AUDIO_BUF_SIZE * 2];
+  float phase = 0.0f;
+  float phaseInc = (2.0f * (float)M_PI * freqHz) / (float)I2S_SAMPLE_RATE;
+  
+  unsigned long samplesWritten = 0;
+  while (samplesWritten < totalSamples) {
+    size_t chunkSamples = (totalSamples - samplesWritten > AUDIO_BUF_SIZE) ? AUDIO_BUF_SIZE : (totalSamples - samplesWritten);
+    for (size_t i = 0; i < chunkSamples; i++) {
+      float env = 1.0f;
+      if (samplesWritten + i < 80) {
+        env = (float)(samplesWritten + i) / 80.0f;
+      } else if (totalSamples - (samplesWritten + i) < 80) {
+        env = (float)(totalSamples - (samplesWritten + i)) / 80.0f;
+      }
+      
+      int16_t sample = (int16_t)(sinf(phase) * (float)maxAmp * env);
+      buffer[i * 2]     = sample;
+      buffer[i * 2 + 1] = sample;
+      phase += phaseInc;
+      if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+    }
+    
+    size_t bytesWritten = 0;
+    i2s_write(I2S_PORT, buffer, chunkSamples * 2 * sizeof(int16_t), &bytesWritten, portMAX_DELAY);
+    samplesWritten += chunkSamples;
+  }
+}
+
+void playSweepI2S(float startFreq, float endFreq, unsigned long durationMs, float volMult = 1.0f) {
+  if (!i2sAudioReady || durationMs == 0 || audioMuted || audioVolume <= 0) {
+    delay(durationMs);
+    return;
+  }
+  
+  float actualVol = (audioVolume / 100.0f) * volMult;
+  int16_t maxAmp = (int16_t)(32767.0f * actualVol * 0.45f);
+  
+  unsigned long totalSamples = (unsigned long)((float)I2S_SAMPLE_RATE * (durationMs / 1000.0f));
+  if (totalSamples == 0) totalSamples = 1;
+  
+  int16_t buffer[AUDIO_BUF_SIZE * 2];
+  float phase = 0.0f;
+  
+  unsigned long samplesWritten = 0;
+  while (samplesWritten < totalSamples) {
+    size_t chunkSamples = (totalSamples - samplesWritten > AUDIO_BUF_SIZE) ? AUDIO_BUF_SIZE : (totalSamples - samplesWritten);
+    for (size_t i = 0; i < chunkSamples; i++) {
+      float progress = (float)(samplesWritten + i) / (float)totalSamples;
+      float curFreq = startFreq + progress * (endFreq - startFreq);
+      float phaseInc = (2.0f * (float)M_PI * curFreq) / (float)I2S_SAMPLE_RATE;
+      
+      float env = 1.0f;
+      if (samplesWritten + i < 60) env = (float)(samplesWritten + i) / 60.0f;
+      else if (totalSamples - (samplesWritten + i) < 60) env = (float)(totalSamples - (samplesWritten + i)) / 60.0f;
+      
+      int16_t sample = (int16_t)(sinf(phase) * (float)maxAmp * env);
+      buffer[i * 2]     = sample;
+      buffer[i * 2 + 1] = sample;
+      phase += phaseInc;
+      if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+    }
+    
+    size_t bytesWritten = 0;
+    i2s_write(I2S_PORT, buffer, chunkSamples * 2 * sizeof(int16_t), &bytesWritten, portMAX_DELAY);
+    samplesWritten += chunkSamples;
+  }
+}
+
+// Procedural Drone Flight Sound Effects
+void playTakeoffSound() {
+  playSweepI2S(240.0f, 1550.0f, 320, 0.9f); // Turbine spool-up
+  playSweepI2S(1550.0f, 900.0f, 120, 0.85f); // Rotor air rush
+}
+
+void playLandSound() {
+  playSweepI2S(1200.0f, 220.0f, 320, 0.85f); // Spool-down
+  playToneI2S(523.25f, 90, 0.8f);           // Touchdown confirmation
+}
+
+void playFlipSound() {
+  playSweepI2S(1400.0f, 400.0f, 140, 0.95f); // Aerodynamic whoosh
+}
+
+void playRadarPingSound() {
+  playToneI2S(1760.0f, 65, 0.85f);
+}
+
+void playLowBatteryAlarm() {
+  for (int i = 0; i < 2; i++) {
+    playToneI2S(1100.0f, 60, 0.95f);
+    delay(20);
+  }
+}
+
+void playEmergencySiren() {
+  for (int i = 0; i < 2; i++) {
+    playSweepI2S(550.0f, 1900.0f, 120, 1.0f);
+    playSweepI2S(1900.0f, 550.0f, 120, 1.0f);
+  }
+}
+
+void playConnectedJingle() {
+  float notes[] = {523.25f, 659.25f, 783.99f, 1046.5f}; // C5, E5, G5, C6
+  for (int i = 0; i < 4; i++) {
+    playToneI2S(notes[i], 65, 0.85f);
+    delay(10);
+  }
+}
+
+void playClickSound() {
+  playToneI2S(1400.0f, 25, 0.7f);
+}
+
+void setAudioVolume(int vol) {
+  audioVolume = constrain(vol, 0, 100);
+  Serial.print("[MAX98357A] Drone Audio Volume set to: ");
+  Serial.print(audioVolume);
+  Serial.println("%");
+}
+
+void setAudioMute(bool mute) {
+  audioMuted = mute;
+  Serial.print("[MAX98357A] Drone Audio Mute: ");
+  Serial.println(audioMuted ? "MUTED" : "UNMUTED");
+}
 
 // =============================================================================
 // Touch Dashboard Button Definition
@@ -393,27 +589,34 @@ void executeDroneCommand(String cmd, String source) {
   telemetry.commandSource = source;
   telemetry.lastCmdTimestamp = millis();
 
-  // Update animated flight state based on command
+  // Update animated flight state and trigger sound effects based on command
   if (cmd == "takeoff") {
     telemetry.flightState = "TAKING_OFF";
     propellerSpeed = 45.0f; // High speed
+    playTakeoffSound();
   } else if (cmd == "land") {
     telemetry.flightState = "LANDING";
     propellerSpeed = 20.0f;
+    playLandSound();
   } else if (cmd == "emergency") {
     telemetry.flightState = "EMERGENCY";
     propellerSpeed = 0.0f;
+    playEmergencySiren();
   } else if (cmd.startsWith("flip")) {
     telemetry.flightState = "FLIPPING";
     propellerSpeed = 60.0f;
+    playFlipSound();
   } else if (cmd.startsWith("up") || cmd.startsWith("down") || cmd.startsWith("forward") || cmd.startsWith("back") || cmd.startsWith("left") || cmd.startsWith("right")) {
     telemetry.flightState = "FLYING";
     propellerSpeed = 35.0f;
+    playRadarPingSound();
   } else if (cmd.startsWith("cw") || cmd.startsWith("ccw")) {
     telemetry.flightState = "TURNING";
     propellerSpeed = 30.0f;
+    playRadarPingSound();
   } else if (cmd == "command") {
     telemetry.flightState = "SDK_READY";
+    playConnectedJingle();
   }
 
   // Send over UDP to Tello Drone (or simulate)
@@ -495,6 +698,7 @@ void handleTouchButton(int btnIdx) {
   if (btnIdx < 0 || btnIdx >= NUM_DASHBOARD_BTNS) return;
   const TouchButton& btn = DASHBOARD_BTNS[btnIdx];
   activePressedBtnIdx = btnIdx;
+  playClickSound();
 
   String type = String(btn.type);
   String cmd = String(btn.command);
@@ -666,6 +870,90 @@ void parseSerialCommand(String cmd) {
 
   Serial.println("[Host Serial In] Received: '" + cmd + "'");
 
+  // --- MAX98357A I2S Audio Amplifier Commands ---
+  if (cmd.equalsIgnoreCase("AUDIO:TAKEOFF") || cmd.equalsIgnoreCase("PLAY:TAKEOFF")) {
+    playTakeoffSound();
+    Serial.println("[MAX98357A] Played Takeoff Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:LAND") || cmd.equalsIgnoreCase("PLAY:LAND")) {
+    playLandSound();
+    Serial.println("[MAX98357A] Played Land Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:FLIP") || cmd.equalsIgnoreCase("PLAY:FLIP")) {
+    playFlipSound();
+    Serial.println("[MAX98357A] Played Flip Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:RADAR") || cmd.equalsIgnoreCase("PLAY:RADAR")) {
+    playRadarPingSound();
+    Serial.println("[MAX98357A] Played Radar Ping");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:ALARM") || cmd.equalsIgnoreCase("PLAY:ALARM") || cmd.equalsIgnoreCase("AUDIO:LOW_BATTERY")) {
+    playLowBatteryAlarm();
+    Serial.println("[MAX98357A] Played Low Battery Alarm");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:SIREN") || cmd.equalsIgnoreCase("AUDIO:EMERGENCY") || cmd.equalsIgnoreCase("PLAY:SIREN")) {
+    playEmergencySiren();
+    Serial.println("[MAX98357A] Played Emergency Siren");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:CONNECT") || cmd.equalsIgnoreCase("PLAY:CONNECT")) {
+    playConnectedJingle();
+    Serial.println("[MAX98357A] Played Connected Jingle");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:CLICK") || cmd.equalsIgnoreCase("AUDIO:BEEP") || cmd.equalsIgnoreCase("PLAY:CLICK")) {
+    playClickSound();
+    Serial.println("[MAX98357A] Played Click Sound");
+    return;
+  }
+  if (cmd.startsWith("AUDIO:TONE:") || cmd.startsWith("audio:tone:")) {
+    int firstColon = cmd.indexOf(':');
+    int secondColon = cmd.indexOf(':', firstColon + 1);
+    if (secondColon != -1) {
+      float freq = cmd.substring(firstColon + 1, secondColon).toFloat();
+      int dur = cmd.substring(secondColon + 1).toInt();
+      playToneI2S(freq, dur);
+      Serial.println("[MAX98357A] Played Tone " + String(freq) + "Hz for " + String(dur) + "ms");
+      return;
+    }
+  }
+  if (cmd.startsWith("AUDIO:SWEEP:") || cmd.startsWith("audio:sweep:")) {
+    int c1 = cmd.indexOf(':');
+    int c2 = cmd.indexOf(':', c1 + 1);
+    int c3 = cmd.indexOf(':', c2 + 1);
+    if (c1 != -1 && c2 != -1 && c3 != -1) {
+      float startF = cmd.substring(c1 + 1, c2).toFloat();
+      float endF   = cmd.substring(c2 + 1, c3).toFloat();
+      int dur      = cmd.substring(c3 + 1).toInt();
+      playSweepI2S(startF, endF, dur);
+      Serial.println("[MAX98357A] Played Sweep " + String(startF) + "->" + String(endF) + "Hz");
+      return;
+    }
+  }
+  if (cmd.startsWith("AUDIO:VOL:") || cmd.startsWith("audio:vol:") || cmd.startsWith("VOL:") || cmd.startsWith("vol:")) {
+    int colonIdx = cmd.indexOf(':');
+    int vol = cmd.substring(colonIdx + 1).toInt();
+    setAudioVolume(vol);
+    return;
+  }
+  if (cmd.startsWith("AUDIO:MUTE:") || cmd.startsWith("audio:mute:") || cmd.equalsIgnoreCase("AUDIO:MUTE") || cmd.equalsIgnoreCase("MUTE")) {
+    int colonIdx = cmd.indexOf(':');
+    if (colonIdx != -1) {
+      String mStr = cmd.substring(colonIdx + 1);
+      mStr.toUpperCase();
+      mStr.trim();
+      setAudioMute(mStr == "1" || mStr == "ON" || mStr == "TRUE");
+    } else {
+      setAudioMute(!audioMuted);
+    }
+    return;
+  }
+
   // Format 1: "TELLO:<command>" (e.g. "TELLO:takeoff", "TELLO:forward 50", "TELLO:flip f")
   if (cmd.startsWith("TELLO:") || cmd.startsWith("tello:")) {
     String droneCmd = cmd.substring(cmd.indexOf(':') + 1);
@@ -716,6 +1004,9 @@ void setup() {
   SerialBT.begin("esp32-touch-lcd-tello");
   #endif
 
+  // Initialize MAX98357A I2S Audio Amplifier (BCLK=19, LRC=20, DIN=21)
+  initI2SAudio();
+
   // Initialize I2C Bus for GT911 Capacitive Touchscreen
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000); // 400kHz Fast I2C
@@ -723,11 +1014,16 @@ void setup() {
   // Initialize GT911 Touch Controller
   initTouchController();
 
+  // Play startup radar sonar ping
+  playRadarPingSound();
+
   Serial.println("==========================================================");
   Serial.println("🚁 Waveshare 7-Inch Touch LCD ESP32-S3 Tello Drone Bridge");
   Serial.println("==========================================================");
   Serial.println("Screen: 7.0-inch 800x480 Widescreen Capacitive Touch LCD");
   Serial.println("Touch Controller: GT911 (I2C: 0x5D, SDA: 8, SCL: 9, INT: 4)");
+  Serial.print("MAX98357A I2S Audio: ");
+  Serial.println(i2sAudioReady ? "READY (BCLK=19, LRC=20, DIN=21)" : "INIT FAILED");
   Serial.println("Animations Engine: READY (40 FPS Quadcopter Visualizer)");
   Serial.println("Host Command Bridge: USB CDC Serial & Bluetooth");
   Serial.println("==========================================================");

@@ -584,7 +584,7 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         types.FunctionDeclaration(
             name="control_robot_arm",
             description=(
-                "Controls a 6 degrees of freedom (6-DOF) Robot Arm driven by an ESP32-S3-Touch-LCD-7 (7.0-inch Capacitive Touchscreen with live telemetry and animation) via a PCA9685 servo driver. "
+                "Controls a 6 degrees of freedom (6-DOF) Robot Arm driven by a Waveshare ESP32-S3-Touch-LCD-7B (7.0-inch 1024x600 HD Capacitive Touchscreen with live telemetry and animation) via a PCA9685 servo driver. "
                 "Allows triggering gestures ('yes', 'no', 'high_five', 'wave', 'bow', 'dance'), "
                 "executing preset demonstration motions ('home', 'rest', 'reach', 'pick_and_place', 'open_gripper', 'close_gripper', 'stop'), "
                 "setting individual joint angles (channel 0: Base, 1: Shoulder, 2: Elbow, 3: Wrist Pitch, 4: Wrist Roll, 5: Gripper), "
@@ -703,6 +703,38 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         )
     )
 
+    function_declarations.append(
+        types.FunctionDeclaration(
+            name="play_hardware_sound",
+            description=(
+                "Plays procedural audio sound effects on the MAX98357A I2S Audio Amplifier attached to any of the 4 ESP32-S3 Touchscreen hardware boards: "
+                "'birds' (chirp, squawk, trill, melody, symphony, beep), "
+                "'hexapod' (step, startup, shutdown, alert, dance, r2d2, servo, click), "
+                "'arm' (claw_grab, claw_release, servo, chime, error, fanfare, beep), "
+                "or 'tello'/'drone' (takeoff, land, flip, radar, alarm, siren, connect). "
+                "Can also set volume (0-100)."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "device": {
+                        "type": "string",
+                        "description": "Target hardware device: 'birds', 'hexapod', 'arm', 'drone' (or 'tello')."
+                    },
+                    "sound": {
+                        "type": "string",
+                        "description": "Sound name to play (e.g. 'chirp', 'squawk', 'step', 'startup', 'claw_grab', 'chime', 'takeoff', 'land', 'flip', 'radar', 'fanfare', etc.)."
+                    },
+                    "volume": {
+                        "type": "integer",
+                        "description": "Optional volume percentage (0 to 100)."
+                    }
+                },
+                "required": ["device", "sound"]
+            }
+        )
+    )
+
     if function_declarations:
         tools.append(types.Tool(function_declarations=function_declarations))
 
@@ -710,9 +742,9 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         "You are a helpful real-time multimodal voice assistant running on the user's local computer. "
         "You have direct access to local hardware and smart devices: an onboard LED of an ESP32 microcontroller, "
         "a 6-leg Hexapod robot powered by the ESP-32-Touch-LCD controller (Bluetooth: 'hexapod-touch-lcd' / Serial) with an onboard interactive touch screen, "
-        "a 6-DOF Robot Arm powered by an ESP32-S3-Touch-LCD-7 (7.0-inch Capacitive Touchscreen with live telemetry & animation) via PCA9685, "
+        "a 6-DOF Robot Arm powered by a Waveshare ESP32-S3-Touch-LCD-7B (7.0-inch 1024x600 HD Capacitive Touchscreen with live telemetry & animation) via PCA9685, "
         "a Birds & LED stage controller powered by a unified Waveshare ESP32-S3-Touch-LCD-7 (7.0-inch 800x480 Capacitive Touchscreen with MCP23017 I/O Expander, Dual PCA9685 Servo Drivers, animated parrot mascot, and light shows), "
-        "a Tello drone, Leviton smart lights, and eWeLink (Sonoff) devices.\n\n"
+        "a Tello drone, Leviton smart lights, and eWeLink (Sonoff) devices. All 4 ESP32-S3 touchscreen controllers are equipped with MAX98357A I2S Class-D mono audio amplifiers.\n\n"
         "1. VISUAL MODALITY AWARENESS:\n"
         "   - You are receiving a continuous, real-time video stream (from the user's webcam or screen share).\n"
         "   - Pay close attention to what you see. You MUST proactively notice, react to, and comment on objects, gestures, text, or visual changes shown in the video feed. Do NOT wait for the user to prompt you or say they are showing you something; describe what you see naturally as part of the conversation.\n"
@@ -721,8 +753,9 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         "   - The video stream is sent to you at exactly 1 frame per second (1 FPS). Each frame you receive represents exactly 1 second of real time.\n"
         "   - When estimating time or counting seconds (e.g., if the user asks you to wait 5 seconds, count seconds, or track time), use the number of incoming frames as your clock (e.g. 5 frames = 5 seconds). Do not rush or estimate time based on text-generation speeds; wait for the appropriate amount of time to pass.\n\n"
         "3. HARDWARE CONTROL:\n"
+        "   - MAX98357A Hardware Audio: You MUST use the `play_hardware_sound` tool when the user asks verbally to play hardware sounds, bird chirps/songs, hexapod droid chatter/steps, robot arm grab/release chimes, or drone radar pings/takeoff audio on any of the 4 ESP32 touchscreen modules.\n"
         "   - Bird Routines & Animations: You MUST use the `trigger_bird_routine` tool when the user asks verbally or visually to perform singing ('sing'), spotlight sweeping ('sweep'), turntable dancing ('dance'), light shows ('lightshow'), bird symphony ('symphony'), or return to home ('home') on the Waveshare 7-inch Touch LCD controller.\n"
-        "   - Robot Arm: You MUST use the `control_robot_arm` tool when the user asks verbally or visually to control the 6-DOF robot arm powered by the ESP32-S3-Touch-LCD-7, perform gestures like 'yes', 'no', 'high_five', 'wave', 'bow', 'dance', execute pick & place, or set arm joint angles.\n"
+        "   - Robot Arm: You MUST use the `control_robot_arm` tool when the user asks verbally or visually to control the 6-DOF robot arm powered by the Waveshare ESP32-S3-Touch-LCD-7B, perform gestures like 'yes', 'no', 'high_five', 'wave', 'bow', 'dance', execute pick & place, or set arm joint angles.\n"
         "   - Hexapod Robot: You MUST use the `control_hexapod` tool when the user asks verbally or visually to control the 6-leg hexapod robot powered by the ESP-32-Touch-LCD (e.g. walk, run, wave left arm, wave right arm, dance, sit, stand, flat to floor, turn left, turn right, bow, set leg joints, or display messages on the robot's screen).\n"
         "   - ESP32 PCA9685 Servos: You MUST use the `set_servo_angle` tool when the user asks verbally or visually to move, position, turn, or adjust any of the servos on the Birds ESP32-S3 Touchscreen (Left/Right sides) or Arm ESP32 (e.g. Left/Right Parrot Up/Dn, Right Spotlight Rotate, Center Bird Up/Dn, Center Turntable Rotate, Base/Shoulder/Elbow, etc.) to a specific degree angle (0 to 180 degrees).\n"
         "   - ESP32 LED: You MUST use the `set_led_state` tool to turn the LED on or off. If the user asks you to pulse, blink, or flash the LED a certain number of times (e.g., to match the count of fingers you see in the frame), you MUST use the `pulse_led` tool with the appropriate count.\n"
@@ -3510,6 +3543,47 @@ class AudioLoop:
     async def execute_bird_routine_async(self, routine: str) -> dict:
         return await asyncio.to_thread(self.execute_bird_routine, routine)
 
+    def play_hardware_sound(self, device: str, sound: str, volume: int = None) -> dict:
+        device = device.lower().strip()
+        sound = sound.lower().strip()
+        cmd_str = f"AUDIO:{sound.upper()}\r\n"
+        vol_cmd = f"AUDIO:VOL:{int(volume)}\r\n" if volume is not None else None
+
+        conn = None
+        if device in ("birds", "bird", "left", "stage"):
+            conn = self.serial_left or self.serial_conn
+        elif device in ("arm", "robot_arm"):
+            conn = self.serial_arm
+        elif device in ("hexapod", "hex", "shobots"):
+            conn = getattr(self.hexapod, 'serial_hexapod', None) or self.serial_conn
+        elif device in ("tello", "drone", "telloscreen"):
+            conn = self.serial_tello
+
+        if conn and conn.is_open:
+            try:
+                if vol_cmd:
+                    conn.write(vol_cmd.encode("utf-8"))
+                conn.write(cmd_str.encode("utf-8"))
+                conn.flush()
+                msg = f"Sent sound command '{sound.upper()}' to {device.upper()} over MAX98357A I2S"
+                print(f"\n[MAX98357A-{device.upper()}] {msg}")
+                if hasattr(self, 'gui_window') and self.gui_window and hasattr(self.gui_window, 'update_status'):
+                    self.gui_window.update_status(f"Sound [{device.upper()}]: {sound.upper()}")
+                return {"status": "success", "device": device, "sound": sound, "message": msg}
+            except Exception as e:
+                err_msg = f"Error sending sound to {device}: {e}"
+                print(f"\n[MAX98357A-ERROR] {err_msg}")
+                return {"status": "error", "message": err_msg}
+        else:
+            sim_msg = f"[Simulated MAX98357A Audio] Played sound '{sound.upper()}' on {device.upper()}"
+            print(f"\n{sim_msg}")
+            if hasattr(self, 'gui_window') and self.gui_window and hasattr(self.gui_window, 'update_status'):
+                self.gui_window.update_status(f"Simulated Sound: {sound.upper()} ({device.upper()})")
+            return {"status": "success", "simulated": True, "device": device, "sound": sound, "message": sim_msg}
+
+    async def play_hardware_sound_async(self, device: str, sound: str, volume: int = None) -> dict:
+        return await asyncio.to_thread(self.play_hardware_sound, device, sound, volume)
+
     def set_active_parrot(self, parrot: str) -> dict:
         parrot = parrot.lower().strip()
         cmd_str = f"PARROT_SEL:{parrot.upper()}\r\n"
@@ -4034,6 +4108,18 @@ class AudioLoop:
                                 gpio = fc.args.get("gpio", 2)
                                 duration_ms = fc.args.get("duration_ms", 500)
                                 result = await self.pulse_led_async(count=count, gpio=gpio, duration_ms=duration_ms)
+                                function_responses.append(
+                                    types.FunctionResponse(
+                                        name=fc.name,
+                                        response=result,
+                                        id=fc.id
+                                    )
+                                )
+                            elif fc.name == "play_hardware_sound":
+                                device = fc.args.get("device", "birds")
+                                sound = fc.args.get("sound", "chirp")
+                                volume = fc.args.get("volume")
+                                result = await self.play_hardware_sound_async(device=device, sound=sound, volume=volume)
                                 function_responses.append(
                                     types.FunctionResponse(
                                         name=fc.name,

@@ -45,6 +45,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <math.h>
+#include "driver/i2s.h"
 
 #if defined(CONFIG_BT_ENABLED) && !defined(CONFIG_IDF_TARGET_ESP32S3)
 #include <BluetoothSerial.h>
@@ -53,6 +54,22 @@ BluetoothSerial SerialBT;
 #else
 #define HAS_BT_CLASSIC 0
 #endif
+
+// =============================================================================
+// MAX98357A I2S Mono Audio Amplifier Pinout & Configuration
+// =============================================================================
+#ifndef I2S_BCLK_PIN
+#define I2S_BCLK_PIN          19   // I2S Bit Clock (BCLK / BCK)
+#endif
+#ifndef I2S_LRC_PIN
+#define I2S_LRC_PIN           20   // I2S Word Select / Left-Right Clock (LRC / WS)
+#endif
+#ifndef I2S_DOUT_PIN
+#define I2S_DOUT_PIN          21   // I2S Serial Data Out (DIN on MAX98357A)
+#endif
+#define I2S_PORT              I2S_NUM_0
+#define I2S_SAMPLE_RATE       22050
+#define AUDIO_BUF_SIZE        256
 
 // =============================================================================
 // Touch Dashboard Button Definition
@@ -65,8 +82,6 @@ struct TouchButton {
   int id;
 };
 
-// =============================================================================
-// Hardware Configuration & I2C Addresses
 // =============================================================================
 // Hardware Configuration & I2C Addresses
 // =============================================================================
@@ -168,6 +183,184 @@ float audioSpectrumBars[8];
 int musicNoteX[3] = {200, 220, 185};
 int musicNoteY[3] = {150, 180, 210};
 bool musicNoteActive[3] = {false, false, false};
+
+// Audio Engine State Variables
+bool i2sAudioReady = false;
+int audioVolume = 80; // Default 80% (0 - 100)
+bool audioMuted = false;
+
+// =============================================================================
+// MAX98357A I2S Mono Audio Synthesis & Playback Engine
+// =============================================================================
+void initI2SAudio() {
+  i2s_config_t i2s_config = {
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+    .sample_rate = I2S_SAMPLE_RATE,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+    .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+    .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+    .dma_buf_count = 8,
+    .dma_buf_len = AUDIO_BUF_SIZE,
+    .use_apll = false,
+    .tx_desc_auto_clear = true
+  };
+
+  i2s_pin_config_t pin_config = {
+    .bck_io_num = I2S_BCLK_PIN,
+    .ws_io_num = I2S_LRC_PIN,
+    .data_out_num = I2S_DOUT_PIN,
+    .data_in_num = I2S_PIN_NO_CHANGE
+  };
+
+  esp_err_t err = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
+  if (err == ESP_OK) {
+    i2s_set_pin(I2S_PORT, &pin_config);
+    i2s_zero_dma_buffer(I2S_PORT);
+    i2sAudioReady = true;
+    Serial.println("[MAX98357A] I2S Mono Audio Amplifier Initialized Successfully!");
+  } else {
+    Serial.print("[MAX98357A] I2S Driver Install Failed! Error: ");
+    Serial.println(err);
+  }
+}
+
+void playToneI2S(float freqHz, unsigned long durationMs, float volMult = 1.0f) {
+  if (!i2sAudioReady || freqHz <= 0 || durationMs == 0 || audioMuted || audioVolume <= 0) {
+    delay(durationMs);
+    return;
+  }
+  
+  float actualVol = (audioVolume / 100.0f) * volMult;
+  int16_t maxAmp = (int16_t)(32767.0f * actualVol * 0.45f);
+  
+  unsigned long totalSamples = (unsigned long)((float)I2S_SAMPLE_RATE * (durationMs / 1000.0f));
+  if (totalSamples == 0) totalSamples = 1;
+  
+  int16_t buffer[AUDIO_BUF_SIZE * 2];
+  float phase = 0.0f;
+  float phaseInc = (2.0f * (float)M_PI * freqHz) / (float)I2S_SAMPLE_RATE;
+  
+  unsigned long samplesWritten = 0;
+  while (samplesWritten < totalSamples) {
+    size_t chunkSamples = (totalSamples - samplesWritten > AUDIO_BUF_SIZE) ? AUDIO_BUF_SIZE : (totalSamples - samplesWritten);
+    for (size_t i = 0; i < chunkSamples; i++) {
+      float env = 1.0f;
+      if (samplesWritten + i < 80) {
+        env = (float)(samplesWritten + i) / 80.0f;
+      } else if (totalSamples - (samplesWritten + i) < 80) {
+        env = (float)(totalSamples - (samplesWritten + i)) / 80.0f;
+      }
+      
+      int16_t sample = (int16_t)(sinf(phase) * (float)maxAmp * env);
+      buffer[i * 2]     = sample;
+      buffer[i * 2 + 1] = sample;
+      phase += phaseInc;
+      if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+    }
+    
+    size_t bytesWritten = 0;
+    i2s_write(I2S_PORT, buffer, chunkSamples * 2 * sizeof(int16_t), &bytesWritten, portMAX_DELAY);
+    samplesWritten += chunkSamples;
+  }
+}
+
+void playSweepI2S(float startFreq, float endFreq, unsigned long durationMs, float volMult = 1.0f) {
+  if (!i2sAudioReady || durationMs == 0 || audioMuted || audioVolume <= 0) {
+    delay(durationMs);
+    return;
+  }
+  
+  float actualVol = (audioVolume / 100.0f) * volMult;
+  int16_t maxAmp = (int16_t)(32767.0f * actualVol * 0.45f);
+  
+  unsigned long totalSamples = (unsigned long)((float)I2S_SAMPLE_RATE * (durationMs / 1000.0f));
+  if (totalSamples == 0) totalSamples = 1;
+  
+  int16_t buffer[AUDIO_BUF_SIZE * 2];
+  float phase = 0.0f;
+  
+  unsigned long samplesWritten = 0;
+  while (samplesWritten < totalSamples) {
+    size_t chunkSamples = (totalSamples - samplesWritten > AUDIO_BUF_SIZE) ? AUDIO_BUF_SIZE : (totalSamples - samplesWritten);
+    for (size_t i = 0; i < chunkSamples; i++) {
+      float progress = (float)(samplesWritten + i) / (float)totalSamples;
+      float curFreq = startFreq + progress * (endFreq - startFreq);
+      float phaseInc = (2.0f * (float)M_PI * curFreq) / (float)I2S_SAMPLE_RATE;
+      
+      float env = 1.0f;
+      if (samplesWritten + i < 60) env = (float)(samplesWritten + i) / 60.0f;
+      else if (totalSamples - (samplesWritten + i) < 60) env = (float)(totalSamples - (samplesWritten + i)) / 60.0f;
+      
+      int16_t sample = (int16_t)(sinf(phase) * (float)maxAmp * env);
+      buffer[i * 2]     = sample;
+      buffer[i * 2 + 1] = sample;
+      phase += phaseInc;
+      if (phase >= 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+    }
+    
+    size_t bytesWritten = 0;
+    i2s_write(I2S_PORT, buffer, chunkSamples * 2 * sizeof(int16_t), &bytesWritten, portMAX_DELAY);
+    samplesWritten += chunkSamples;
+  }
+}
+
+// Procedural Bird & Mascot Sound FX
+void playBirdChirpSound() {
+  playSweepI2S(2200.0f, 3900.0f, 40, 0.9f);
+  playSweepI2S(3900.0f, 2100.0f, 65, 1.0f);
+  delay(15);
+  playSweepI2S(2600.0f, 4400.0f, 35, 0.9f);
+  playSweepI2S(4400.0f, 2300.0f, 55, 0.85f);
+}
+
+void playParrotSquawkSound() {
+  playSweepI2S(750.0f, 1600.0f, 60, 1.0f);
+  playToneI2S(1350.0f, 40, 0.9f);
+  playSweepI2S(1600.0f, 850.0f, 80, 0.85f);
+}
+
+void playBirdTrillSound() {
+  for (int i = 0; i < 4; i++) {
+    playSweepI2S(2800.0f, 3600.0f, 25, 0.85f);
+    playSweepI2S(3600.0f, 2800.0f, 25, 0.85f);
+  }
+}
+
+void playBirdSongMelody() {
+  float notes[] = {1046.5f, 1318.5f, 1567.98f, 2093.0f, 1567.98f, 1318.5f, 2093.0f};
+  int durs[]    = {70, 70, 70, 120, 60, 60, 160};
+  for (int i = 0; i < 7; i++) {
+    playToneI2S(notes[i], durs[i], 0.9f);
+    delay(15);
+  }
+}
+
+void playBirdSymphonySound() {
+  float notes[] = {523.25f, 659.25f, 783.99f, 1046.5f, 1318.5f, 1567.98f, 2093.0f};
+  for (int i = 0; i < 7; i++) {
+    playSweepI2S(notes[i] * 0.85f, notes[i], 55, 0.9f);
+    delay(10);
+  }
+  playToneI2S(2093.0f, 220, 1.0f);
+}
+
+void playBeepSound(int freq = 1200, int dur = 45) {
+  playToneI2S(freq, dur, 0.8f);
+}
+
+void setAudioVolume(int vol) {
+  audioVolume = constrain(vol, 0, 100);
+  Serial.print("[MAX98357A] Audio Volume set to: ");
+  Serial.print(audioVolume);
+  Serial.println("%");
+}
+
+void setAudioMute(bool mute) {
+  audioMuted = mute;
+  Serial.print("[MAX98357A] Audio Mute: ");
+  Serial.println(audioMuted ? "MUTED" : "UNMUTED");
+}
 
 // Non-blocking Pulse Timers
 struct PulseTimer {
@@ -408,7 +601,10 @@ void setBirdOutputState(String board, int pin, int state) {
     // Trigger visual animation reaction
     if (onState) {
       if (pin == 0 || pin == 4) mouthOpenPercent = 85; // Parrot mouth
-      if (pin == 15) mouthOpenPercent = 100;          // Chirp
+      if (pin == 15) {
+        mouthOpenPercent = 100; // Chirp
+        playBirdChirpSound();
+      }
     }
   } else {
     // Direct GPIO fallback
@@ -1016,6 +1212,82 @@ void parseCommand(String cmd) {
   cmd.trim();
   if (cmd.length() == 0) return;
 
+  // --- MAX98357A I2S Audio Amplifier Commands ---
+  // Formats: "AUDIO:CHIRP", "AUDIO:SQUAWK", "AUDIO:SONG", "AUDIO:SYMPHONY", "AUDIO:TRILL", "AUDIO:BEEP"
+  // "AUDIO:TONE:<freq>:<dur>", "AUDIO:SWEEP:<start>:<end>:<dur>", "AUDIO:VOL:<0-100>", "AUDIO:MUTE:<1|0>"
+  if (cmd.equalsIgnoreCase("AUDIO:CHIRP") || cmd.equalsIgnoreCase("CHIRP") || cmd.equalsIgnoreCase("PLAY:CHIRP")) {
+    playBirdChirpSound();
+    Serial.println("[MAX98357A] Played Bird Chirp Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:SQUAWK") || cmd.equalsIgnoreCase("SQUAWK") || cmd.equalsIgnoreCase("PLAY:SQUAWK")) {
+    playParrotSquawkSound();
+    Serial.println("[MAX98357A] Played Parrot Squawk Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:TRILL") || cmd.equalsIgnoreCase("TRILL") || cmd.equalsIgnoreCase("PLAY:TRILL")) {
+    playBirdTrillSound();
+    Serial.println("[MAX98357A] Played Bird Trill Sound");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:SONG") || cmd.equalsIgnoreCase("SONG") || cmd.equalsIgnoreCase("PLAY:SONG")) {
+    playBirdSongMelody();
+    Serial.println("[MAX98357A] Played Songbird Melody");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:SYMPHONY") || cmd.equalsIgnoreCase("SYMPHONY") || cmd.equalsIgnoreCase("PLAY:SYMPHONY")) {
+    playBirdSymphonySound();
+    Serial.println("[MAX98357A] Played Bird Symphony Fanfare");
+    return;
+  }
+  if (cmd.equalsIgnoreCase("AUDIO:BEEP") || cmd.equalsIgnoreCase("BEEP") || cmd.equalsIgnoreCase("PLAY:BEEP")) {
+    playBeepSound();
+    Serial.println("[MAX98357A] Played Beep Tone");
+    return;
+  }
+  if (cmd.startsWith("AUDIO:TONE:") || cmd.startsWith("audio:tone:")) {
+    int firstColon = cmd.indexOf(':');
+    int secondColon = cmd.indexOf(':', firstColon + 1);
+    if (secondColon != -1) {
+      float freq = cmd.substring(firstColon + 1, secondColon).toFloat();
+      int dur = cmd.substring(secondColon + 1).toInt();
+      playToneI2S(freq, dur);
+      Serial.println("[MAX98357A] Played Tone " + String(freq) + "Hz for " + String(dur) + "ms");
+      return;
+    }
+  }
+  if (cmd.startsWith("AUDIO:SWEEP:") || cmd.startsWith("audio:sweep:")) {
+    int c1 = cmd.indexOf(':');
+    int c2 = cmd.indexOf(':', c1 + 1);
+    int c3 = cmd.indexOf(':', c2 + 1);
+    if (c1 != -1 && c2 != -1 && c3 != -1) {
+      float startF = cmd.substring(c1 + 1, c2).toFloat();
+      float endF   = cmd.substring(c2 + 1, c3).toFloat();
+      int dur      = cmd.substring(c3 + 1).toInt();
+      playSweepI2S(startF, endF, dur);
+      Serial.println("[MAX98357A] Played Sweep " + String(startF) + "->" + String(endF) + "Hz");
+      return;
+    }
+  }
+  if (cmd.startsWith("AUDIO:VOL:") || cmd.startsWith("audio:vol:") || cmd.startsWith("VOL:") || cmd.startsWith("vol:")) {
+    int colonIdx = cmd.indexOf(':');
+    int vol = cmd.substring(colonIdx + 1).toInt();
+    setAudioVolume(vol);
+    return;
+  }
+  if (cmd.startsWith("AUDIO:MUTE:") || cmd.startsWith("audio:mute:") || cmd.equalsIgnoreCase("AUDIO:MUTE") || cmd.equalsIgnoreCase("MUTE")) {
+    int colonIdx = cmd.indexOf(':');
+    if (colonIdx != -1) {
+      String mStr = cmd.substring(colonIdx + 1);
+      mStr.toUpperCase();
+      mStr.trim();
+      setAudioMute(mStr == "1" || mStr == "ON" || mStr == "TRUE");
+    } else {
+      setAudioMute(!audioMuted);
+    }
+    return;
+  }
+
   // --- 0. PARROT SELECTION & MIC REACTIVITY Commands ---
   // Formats: "PARROT_SEL:<LEFT|RIGHT|BOTH>", "PARROT:<LEFT|RIGHT|BOTH>", "PARROT:L", "PARROT:R", "PARROT:BOTH"
   if (cmd.startsWith("PARROT_SEL:") || cmd.startsWith("parrot_sel:") || cmd.startsWith("PARROT:") || cmd.startsWith("parrot:")) {
@@ -1248,6 +1520,7 @@ void setup() {
   }
 
   // Initialize Peripherals
+  initI2SAudio();
   initMCP23017();
   initPCA9685Drivers();
   initTouchController();
@@ -1259,9 +1532,14 @@ void setup() {
     }
   }
 
+  // Play startup greeting chirp
+  playBirdChirpSound();
+
   Serial.println("==========================================================");
   Serial.println("🦜 Waveshare 7-Inch Touch LCD ESP32 Firmware Online!");
   Serial.println("==========================================================");
+  Serial.print("MAX98357A I2S Audio: ");
+  Serial.println(i2sAudioReady ? "READY (BCLK=19, LRC=20, DIN=21)" : "INIT FAILED");
   Serial.print("MCP23017 Primary (0x20): ");
   Serial.println(mcpPrimaryPresent ? "CONNECTED" : "NOT DETECTED");
   Serial.print("MCP23017 Secondary (0x21): ");
