@@ -83,10 +83,21 @@ struct TouchButton {
 };
 
 // =============================================================================
-// Hardware Configuration & I2C Addresses
+// Hardware Configuration & Board Profiles
 // =============================================================================
-#define SCREEN_WIDTH         800
-#define SCREEN_HEIGHT        480
+// Select ONE board profile below (Default: Waveshare ESP32-S3-Touch-LCD-7B):
+#define BOARD_ESP32_TOUCH_LCD_7B   1  // Waveshare ESP32-S3-Touch-LCD-7B (7.0" 1024x600 HD GT911 + CH422G IO)
+//#define BOARD_ESP32_TOUCH_LCD_7A 1  // Waveshare ESP32-S3-Touch-LCD-7 (7.0" 800x480 Standard GT911)
+
+#if defined(BOARD_ESP32_TOUCH_LCD_7B)
+  #define SCREEN_WIDTH         1024
+  #define SCREEN_HEIGHT         600
+  #define HAS_CH422G_IO           1   // Onboard IO Expander for Backlight & Power Control
+#else
+  #define SCREEN_WIDTH          800
+  #define SCREEN_HEIGHT         480
+  #define HAS_CH422G_IO           0
+#endif
 
 #define I2C_SDA_PIN            8
 #define I2C_SCL_PIN            9
@@ -951,6 +962,27 @@ void updateSpeechMotionEngine() {
 }
 
 // =============================================================================
+// Waveshare ESP32-S3-Touch-LCD-7B Onboard IO Expander (CH422G) Driver
+// =============================================================================
+void initIOExpander7B() {
+#if HAS_CH422G_IO
+  // Probes CH422G IO expander addresses (0x24 / 0x38)
+  // EXIO1: TP_RST (1), EXIO2: Backlight DISP (1), EXIO4: SD_CS (1), EXIO5: USB_SEL (0), EXIO6: LCD_VDD_EN (1)
+  uint8_t addrs[] = {0x24, 0x38};
+  for (int i = 0; i < 2; i++) {
+    Wire.beginTransmission(addrs[i]);
+    Wire.write(0x01); // Set IO direction
+    Wire.endTransmission();
+
+    Wire.beginTransmission(addrs[i]);
+    Wire.write(0x02); // Output register
+    Wire.write(0x46); // Bit 1 (TP_RST=1), Bit 2 (DISP=1), Bit 6 (LCD_VDD_EN=1)
+    Wire.endTransmission();
+  }
+#endif
+}
+
+// =============================================================================
 // GT911 Capacitive Touchscreen Driver
 // =============================================================================
 void initTouchController() {
@@ -990,6 +1022,9 @@ bool readTouch(int &x, int &y) {
       x = (xHigh << 8) | xLow;
       y = (yHigh << 8) | yLow;
 
+      x = constrain(x, 0, SCREEN_WIDTH - 1);
+      y = constrain(y, 0, SCREEN_HEIGHT - 1);
+
       // Clear buffer flag
       Wire.beginTransmission((uint8_t)GT911_I2C_ADDR);
       Wire.write(0x81);
@@ -1012,6 +1047,51 @@ bool readTouch(int &x, int &y) {
 // =============================================================================
 // On-Screen Touch Dashboard Layout & Action Dispatcher
 // =============================================================================
+#if defined(BOARD_ESP32_TOUCH_LCD_7B)
+// 1024x600 High-Definition Touch Dashboard
+const TouchButton DASHBOARD_BTNS[] = {
+  // Left Bird Output Toggles (Columns 1 & 2, Left Side: X=25, 135)
+  {"L Mouth",       25,  80, 100, 48, "output", "left", 0},
+  {"L Eyes",       135,  80, 100, 48, "output", "left", 1},
+  {"L Body",        25, 136, 100, 48, "output", "left", 2},
+  {"L Light",      135, 136, 100, 48, "output", "left", 3},
+  {"L Mouth Sel",   25, 192, 100, 48, "output", "left", 4},
+  {"L Rear Move",  135, 192, 100, 48, "output", "left", 5},
+  {"L Rear Light",  25, 248, 100, 48, "output", "left", 12},
+  {"L Front Move", 135, 248, 100, 48, "output", "left", 13},
+  {"L Front Light", 25, 304, 100, 48, "output", "left", 14},
+  {"L Chirp",      135, 304, 100, 48, "output", "left", 15},
+  {"Ctr Bird Move", 25, 360, 210, 48, "output", "left", 16},
+
+  // Parrot Selection & Mic Sound Reactivity (Center Top Bar: X=270..710)
+  {"👈 L PARROT",  270,  80, 145, 48, "parrot_sel", "left", 0},
+  {"🦜 BOTH",      425,  80, 130, 48, "parrot_sel", "both", 0},
+  {"👉 R PARROT",  565,  80, 145, 48, "parrot_sel", "right", 0},
+  {"🎤 MIC REACT", 335, 138, 310, 48, "mic_toggle", "toggle", 0},
+
+  // Right Bird Output Toggles (Columns 5 & 6, Right Side: X=770, 880)
+  {"R Mouth",      770,  80, 100, 48, "output", "right", 0},
+  {"R Eyes",       880,  80, 100, 48, "output", "right", 1},
+  {"R Body",       770, 136, 100, 48, "output", "right", 2},
+  {"R Light",      880, 136, 100, 48, "output", "right", 3},
+  {"R Mouth Sel",  770, 192, 100, 48, "output", "right", 4},
+  {"R Rear Move",  880, 192, 100, 48, "output", "right", 5},
+  {"R Rear Light", 770, 248, 100, 48, "output", "right", 12},
+  {"R Front Move", 880, 248, 100, 48, "output", "right", 13},
+  {"R Front Light",770, 304, 100, 48, "output", "right", 14},
+  {"R Chirp",      880, 304, 100, 48, "output", "right", 15},
+  {"Center Move",  770, 360, 210, 48, "output", "right", 16},
+
+  // Routine Quick-Action Buttons (Center Bottom Control Bar: Y=495, H=68)
+  {"🦜 SING",       25, 495, 145, 68, "routine", "sing", 0},
+  {"💡 SWEEP",     180, 495, 145, 68, "routine", "sweep", 0},
+  {"🔄 DANCE",     335, 495, 145, 68, "routine", "dance", 0},
+  {"🌟 LIGHTS",    490, 495, 145, 68, "routine", "lightshow", 0},
+  {"🎶 SYMPHONY",  645, 495, 165, 68, "routine", "sing", 0},
+  {"🏠 ALL HOME",  820, 495, 175, 68, "routine", "home", 0},
+};
+#else
+// 800x480 Standard Dashboard
 const TouchButton DASHBOARD_BTNS[] = {
   // Left Bird Output Toggles (Column 1 & 2, Left Side of 7" Screen)
   {"L Mouth",       20,  70, 90, 42, "output", "left", 0},
@@ -1053,6 +1133,7 @@ const TouchButton DASHBOARD_BTNS[] = {
   {"🎶 SYMPHONY",  520, 395, 125, 55, "routine", "sing", 0},
   {"🏠 ALL HOME",  655, 395, 125, 55, "routine", "home", 0},
 };
+#endif
 const int NUM_DASHBOARD_BTNS = sizeof(DASHBOARD_BTNS) / sizeof(TouchButton);
 
 void handleTouchAction(int btnIdx) {
@@ -1520,6 +1601,7 @@ void setup() {
   }
 
   // Initialize Peripherals
+  initIOExpander7B(); // Enable CH422G Backlight, Power & Touch Reset
   initI2SAudio();
   initMCP23017();
   initPCA9685Drivers();
@@ -1536,7 +1618,9 @@ void setup() {
   playBirdChirpSound();
 
   Serial.println("==========================================================");
-  Serial.println("🦜 Waveshare 7-Inch Touch LCD ESP32 Firmware Online!");
+  Serial.println("🦜 Waveshare ESP32-S3-Touch-LCD-7B Birds & LED Controller");
+  Serial.println("Display: 1024x600 HD Widescreen RGB | Touch: GT911 Capacitive");
+  Serial.println("IO Expander: CH422G (Backlight EXIO2, Power EXIO6, Touch RST EXIO1)");
   Serial.println("==========================================================");
   Serial.print("MAX98357A I2S Audio: ");
   Serial.println(i2sAudioReady ? "READY (BCLK=19, LRC=20, DIN=21)" : "INIT FAILED");

@@ -665,7 +665,7 @@ async function connectSession() {
                 },
                 {
                   name: "control_hexapod",
-                  description: "Controls the 6-leg Hexapod robot driven by the ESP-32-Touch-LCD controller (over Bluetooth 'hexapod-touch-lcd' or USB serial). Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message'. Can also adjust leg joints or display custom text on the onboard Touch LCD.",
+                  description: "Controls the 6-leg Hexapod robot driven by the Waveshare ESP32-S3-Touch-LCD-7B controller (over Bluetooth 'hexapod-touch-7b' or USB serial). Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message'. Can also adjust leg joints or display custom text on the onboard 1024x600 HD Touch LCD.",
                   parameters: {
                     type: "OBJECT",
                     properties: {
@@ -687,7 +687,33 @@ async function connectSession() {
                       },
                       lcd_message: {
                         type: "STRING",
-                        description: "Custom text or status message to display on the robot's onboard ESP-32-Touch-LCD screen."
+                        description: "Custom text or status message to display on the robot's onboard Waveshare 7B Touch LCD screen."
+                      }
+                    },
+                    required: ["action"]
+                  }
+                },
+                {
+                  name: "control_robot_arm",
+                  description: "Controls the 6-DOF Robot Arm powered by the Waveshare ESP32-S3-Touch-LCD-7B (over USB serial or Bluetooth). Supports postures ('home', 'rest', 'reach', 'bow'), gestures ('yes', 'no', 'wave', 'high_five', 'dance'), gripper claw control ('open_gripper', 'close_gripper'), speed changes, or setting specific joint angles (0: Base/Waist, 1: Shoulder, 2: Elbow, 3: Wrist Pitch, 4: Wrist Roll, 5: Claw).",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      action: {
+                        type: "STRING",
+                        description: "Action or gesture: 'home', 'rest', 'reach', 'bow', 'yes', 'no', 'wave', 'high_five', 'dance', 'open_gripper', 'close_gripper', 'stop', 'set_joint', 'set_ik', 'set_lcd_message'."
+                      },
+                      channel: {
+                        type: "INTEGER",
+                        description: "Joint channel (0: Base, 1: Shoulder, 2: Elbow, 3: Wrist Pitch, 4: Wrist Roll, 5: Gripper Claw)."
+                      },
+                      angle: {
+                        type: "INTEGER",
+                        description: "Target angle in degrees (0 to 180)."
+                      },
+                      lcd_message: {
+                        type: "STRING",
+                        description: "Custom status message to display on the 1024x600 HD Touchscreen."
                       }
                     },
                     required: ["action"]
@@ -876,12 +902,34 @@ async function connectSession() {
               if (jointName === 'femur') ch = 1;
               else if (jointName === 'tibia') ch = 2;
               writeSerialCommand(`HEX:SERVO:${driver}:${ch}:${angle}\n`);
-              result = { status: "success", leg: legName, joint: jointName, angle: angle, device: "ESP-32-Touch-LCD" };
-              appendSystemMessage(`[ESP-32-Touch-LCD Hexapod] Set Leg ${legName} ${jointName} to ${angle}°`);
+              result = { status: "success", leg: legName, joint: jointName, angle: angle, device: "Waveshare-7B-Hexapod" };
+              appendSystemMessage(`[Waveshare 7B Hexapod] Set Leg ${legName} ${jointName} to ${angle}°`);
             } else {
               writeSerialCommand(`HEX:${action}\n`);
-              result = { status: "success", action: action, device: "ESP-32-Touch-LCD" };
-              appendSystemMessage(`[ESP-32-Touch-LCD Hexapod] Executed action: ${action}`);
+              result = { status: "success", action: action, device: "Waveshare-7B-Hexapod" };
+              appendSystemMessage(`[Waveshare 7B Hexapod] Executed action: ${action}`);
+            }
+          } else if (fc.name === "control_robot_arm") {
+            const action = fc.args.action || "home";
+            const channel = fc.args.channel;
+            const angle = fc.args.angle;
+            const lcdMsg = fc.args.lcd_message;
+
+            if (lcdMsg) {
+              writeSerialCommand(`ARM:LCD:MSG:${lcdMsg}\n`);
+            }
+
+            if (channel !== undefined && angle !== undefined) {
+              writeSerialCommand(`SERVO:${channel}:${angle}\n`);
+              result = { status: "success", channel: channel, angle: angle, device: "Waveshare-7B-Arm" };
+              appendSystemMessage(`[Waveshare 7B Robot Arm] Set Joint ${channel} to ${angle}°`);
+            } else {
+              if (action === "open_gripper") writeSerialCommand(`SERVO:5:20\n`);
+              else if (action === "close_gripper") writeSerialCommand(`SERVO:5:100\n`);
+              else if (action === "home") writeSerialCommand(`ARM:SPEED:250\nSERVO:0:90\nSERVO:1:90\nSERVO:2:90\nSERVO:3:90\nSERVO:4:90\nSERVO:5:40\n`);
+              else writeSerialCommand(`ARM:${action}\n`);
+              result = { status: "success", action: action, device: "Waveshare-7B-Arm" };
+              appendSystemMessage(`[Waveshare 7B Robot Arm] Executed action: ${action}`);
             }
           } else if (fc.name === "play_hardware_sound") {
             const device = (fc.args.device || "birds").toLowerCase();

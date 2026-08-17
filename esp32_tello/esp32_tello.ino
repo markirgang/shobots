@@ -76,10 +76,21 @@ BluetoothSerial SerialBT;
 #define AUDIO_BUF_SIZE        256
 
 // =============================================================================
-// Hardware Configuration & Pinout
+// Hardware Configuration & Board Profiles
 // =============================================================================
-#define SCREEN_WIDTH      800
-#define SCREEN_HEIGHT     480
+// Select ONE board profile below (Default: Waveshare ESP32-S3-Touch-LCD-7B):
+#define BOARD_ESP32_TOUCH_LCD_7B   1  // Waveshare ESP32-S3-Touch-LCD-7B (7.0" 1024x600 HD GT911 + CH422G IO)
+//#define BOARD_ESP32_TOUCH_LCD_7A 1  // Waveshare ESP32-S3-Touch-LCD-7 (7.0" 800x480 Standard GT911)
+
+#if defined(BOARD_ESP32_TOUCH_LCD_7B)
+  #define SCREEN_WIDTH      1024
+  #define SCREEN_HEIGHT      600
+  #define HAS_CH422G_IO        1  // Onboard IO Expander for Backlight & Power Control
+#else
+  #define SCREEN_WIDTH       800
+  #define SCREEN_HEIGHT       480
+  #define HAS_CH422G_IO        0
+#endif
 
 #define I2C_SDA_PIN         8
 #define I2C_SCL_PIN         9
@@ -315,6 +326,27 @@ void setAudioMute(bool mute) {
 }
 
 // =============================================================================
+// Waveshare ESP32-S3-Touch-LCD-7B Onboard IO Expander (CH422G) Driver
+// =============================================================================
+void initIOExpander7B() {
+#if HAS_CH422G_IO
+  // Probes CH422G IO expander addresses (0x24 / 0x38)
+  // EXIO1: TP_RST (1), EXIO2: Backlight DISP (1), EXIO4: SD_CS (1), EXIO5: USB_SEL (0), EXIO6: LCD_VDD_EN (1)
+  uint8_t addrs[] = {0x24, 0x38};
+  for (int i = 0; i < 2; i++) {
+    Wire.beginTransmission(addrs[i]);
+    Wire.write(0x01); // Set IO direction
+    Wire.endTransmission();
+
+    Wire.beginTransmission(addrs[i]);
+    Wire.write(0x02); // Output register
+    Wire.write(0x46); // Bit 1 (TP_RST=1), Bit 2 (DISP=1), Bit 6 (LCD_VDD_EN=1)
+    Wire.endTransmission();
+  }
+#endif
+}
+
+// =============================================================================
 // Touch Dashboard Button Definition
 // =============================================================================
 struct TouchButton {
@@ -326,6 +358,41 @@ struct TouchButton {
   uint16_t fgColor;
 };
 
+#if defined(BOARD_ESP32_TOUCH_LCD_7B)
+// 1024x600 High-Definition HUD Touch Dashboard
+const TouchButton DASHBOARD_BTNS[] = {
+  // --- Left Column: Flight Essentials & Stunts (X=25..205) ---
+  {"🛫 TAKEOFF",     25,  80, 180, 52, "flight",  "takeoff",    0x05E5, 0xFFFF}, // Emerald Green
+  {"🛬 LAND",        25, 142, 180, 52, "flight",  "land",       0xD5A0, 0xFFFF}, // Amber Orange
+  {"🚨 EMERGENCY",   25, 204, 180, 52, "flight",  "emergency",  0xF800, 0xFFFF}, // Red
+  {"📡 CONNECT SDK", 25, 266, 180, 52, "sdk",     "command",    0x041F, 0xFFFF}, // Sky Blue
+  {"🔋 BATTERY?",    25, 328, 180, 52, "flight",  "battery?",   0x1B0E, 0x3FE0}, // Slate / Neon Green
+  {"🔄 FLIP FWD",    25, 390,  85, 52, "flip",    "flip f",     0x79EF, 0xFFFF}, // Purple
+  {"🔄 FLIP BCK",   120, 390,  85, 52, "flip",    "flip b",     0x79EF, 0xFFFF}, // Purple
+  {"↺ FLIP L",      25, 452,  85, 52, "flip",    "flip l",     0x79EF, 0xFFFF}, // Purple
+  {"↻ FLIP R",     120, 452,  85, 52, "flip",    "flip r",     0x79EF, 0xFFFF}, // Purple
+
+  // --- Center Control Bar: Distance Steps & Autonomous Routines (Y=520, H=58) ---
+  {"20 cm (8\")",    25, 520, 130, 58, "dist",    "20",         0x1BEF, 0xFFFF},
+  {"50 cm (20\")",  165, 520, 130, 58, "dist",    "50",         0x03E0, 0xFFFF},
+  {"100 cm (40\")", 305, 520, 130, 58, "dist",    "100",        0x03E0, 0xFFFF},
+  {"🔲 SQUARE",     455, 520, 170, 58, "routine", "square",     0x0277, 0xFFFF},
+  {"🌀 360 SCAN",   635, 520, 170, 58, "routine", "scan360",    0x7A17, 0xFFFF},
+  {"🎈 BOUNCE",     815, 520, 180, 58, "routine", "bounce",     0xC810, 0xFFFF},
+
+  // --- Right Column: Directional Flight & Rotation D-Pad (X=750..995) ---
+  {"▲ FORWARD",     835,  80, 150, 52, "dir",     "forward",    0x1B0E, 0x07FF}, // Cyan
+  {"◄ LEFT",        750, 142, 105, 52, "dir",     "left",       0x1B0E, 0x07FF},
+  {"► RIGHT",       880, 142, 105, 52, "dir",     "right",      0x1B0E, 0x07FF},
+  {"▼ BACK",        835, 204, 150, 52, "dir",     "back",       0x1B0E, 0x07FF},
+  {"⬆ UP",          750, 266, 110, 52, "dir",     "up",         0x1B0E, 0x3FE0}, // Light Green
+  {"⬇ DOWN",        875, 266, 110, 52, "dir",     "down",       0x1B0E, 0x3FE0},
+  {"↺ CCW 90°",     750, 328, 110, 52, "rot",     "ccw 90",     0x4A69, 0xFFFF}, // Indigo
+  {"↻ CW 90°",      875, 328, 110, 52, "rot",     "cw 90",      0x4A69, 0xFFFF},
+  {"⚡ STOP / HOVER", 750, 390, 235, 52, "flight", "stop",       0x9800, 0xFFFF}, // Deep Amber
+};
+#else
+// 800x480 Standard HUD Touch Dashboard
 const TouchButton DASHBOARD_BTNS[] = {
   // --- Left Column: Flight Essentials & Stunts ---
   {"🛫 TAKEOFF",     15,  75, 135, 48, "flight",  "takeoff",    0x05E5, 0xFFFF}, // Emerald Green
@@ -357,6 +424,7 @@ const TouchButton DASHBOARD_BTNS[] = {
   {"↻ CW 90°",      680, 294, 105, 46, "rot",     "cw 90",      0x4A69, 0xFFFF},
   {"⚡ STOP / HOVER", 565, 350, 220, 46, "flight", "stop",       0x9800, 0xFFFF}, // Deep Amber
 };
+#endif
 const int NUM_DASHBOARD_BTNS = sizeof(DASHBOARD_BTNS) / sizeof(TouchButton);
 
 // Touch State Tracking
@@ -440,6 +508,9 @@ bool readTouch(int &x, int &y) {
 
       x = (xHigh << 8) | xLow;
       y = (yHigh << 8) | yLow;
+
+      x = constrain(x, 0, SCREEN_WIDTH - 1);
+      y = constrain(y, 0, SCREEN_HEIGHT - 1);
 
       // Clear buffer status flag
       Wire.beginTransmission((uint8_t)GT911_I2C_ADDR);
@@ -1004,12 +1075,15 @@ void setup() {
   SerialBT.begin("esp32-touch-lcd-tello");
   #endif
 
-  // Initialize MAX98357A I2S Audio Amplifier (BCLK=19, LRC=20, DIN=21)
-  initI2SAudio();
-
-  // Initialize I2C Bus for GT911 Capacitive Touchscreen
+  // Initialize I2C Bus for GT911 Capacitive Touchscreen & IO Expander
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000); // 400kHz Fast I2C
+
+  // Initialize Waveshare 7B Onboard IO Expander (CH422G for Backlight, LCD Power & Touch Reset)
+  initIOExpander7B();
+
+  // Initialize MAX98357A I2S Audio Amplifier (BCLK=19, LRC=20, DIN=21)
+  initI2SAudio();
 
   // Initialize GT911 Touch Controller
   initTouchController();
@@ -1018,9 +1092,10 @@ void setup() {
   playRadarPingSound();
 
   Serial.println("==========================================================");
-  Serial.println("🚁 Waveshare 7-Inch Touch LCD ESP32-S3 Tello Drone Bridge");
+  Serial.println("🚁 Waveshare ESP32-S3-Touch-LCD-7B Tello Drone Bridge & HUD");
   Serial.println("==========================================================");
-  Serial.println("Screen: 7.0-inch 800x480 Widescreen Capacitive Touch LCD");
+  Serial.println("Screen: 7.0-inch 1024x600 HD Capacitive Touch LCD");
+  Serial.println("IO Expander: CH422G (Backlight EXIO2, Power EXIO6, Touch RST EXIO1)");
   Serial.println("Touch Controller: GT911 (I2C: 0x5D, SDA: 8, SCL: 9, INT: 4)");
   Serial.print("MAX98357A I2S Audio: ");
   Serial.println(i2sAudioReady ? "READY (BCLK=19, LRC=20, DIN=21)" : "INIT FAILED");

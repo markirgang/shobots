@@ -1,28 +1,29 @@
-# ESP32-S3 7-Inch Touch LCD DJI Tello Drone Bridge & Flight Visualizer Firmware
+# Waveshare ESP32-S3-Touch-LCD-7B Tello Drone Bridge & HUD Hardware Guide
 
 **Folder:** `esp32_tello/`  
 **Sketch:** `esp32_tello.ino`  
-**Hardware:** Waveshare ESP32-S3-Touch-LCD-7 (7.0" 800x480 Capacitive Touchscreen, GT911 Touch Controller)
+**Hardware:** Waveshare ESP32-S3-Touch-LCD-7B (7.0" 1024×600 High-Definition Capacitive Touchscreen, GT911 Touch Controller, CH422G IO Expander)
 
 ---
 
 ## 🌟 Overview
 
-The **ESP32-S3 7-Inch Touch LCD Tello Bridge** firmware transforms the Waveshare ESP32-S3 7.0-inch Touch LCD into an intelligent flight command bridge, dynamic HUD visualizer, and flight telemetry dashboard for the DJI Tello drone.
+The **Waveshare ESP32-S3-Touch-LCD-7B Tello Bridge & HUD** firmware transforms the Waveshare ESP32-S3 7.0-inch 1024×600 HD Touch LCD into an intelligent flight command bridge, dynamic HUD visualizer, and flight telemetry dashboard for the DJI Tello drone.
 
 Instead of the PC communicating over raw UDP sockets directly to the drone, all commands from:
 1. **The Thinker Window (PC Tkinter GUI Tab)**
 2. **Gemini Multimodal Live Voice & Vision AI**
 3. **The 7-Inch Capacitive Touchscreen Dashboard**
 
-are routed through the ESP32-S3 screen. The ESP32 manages the WiFi connection and UDP sockets to the Tello drone, renders real-time dynamic flight animations on the 800x480 display, and reports live flight telemetry back to the PC.
+are routed through the ESP32-S3 screen. The ESP32 manages the WiFi connection and UDP sockets to the Tello drone, renders real-time dynamic flight animations on the 1024×600 display, and reports live flight telemetry back to the PC.
 
 ---
 
 ## 🚀 Key Features
 
-### 1. 7.0-Inch 800x480 Touchscreen Dashboard
+### 1. 7.0-Inch 1024×600 HD Touchscreen Dashboard
 - **GT911 5-Point Capacitive Touch** interface (I2C: `0x5D`).
+- **Onboard CH422G IO Expander**: Backlight (`EXIO2`), LCD Power (`EXIO6`), Touch Reset (`EXIO1`).
 - **Flight Essentials**:
   - `[🛫 TAKEOFF]` / `[🛬 LAND]` / `[🚨 EMERGENCY]` / `[📡 CONNECT/SDK]` / `[🔋 BATTERY?]`
 - **Directional D-Pad**:
@@ -53,7 +54,7 @@ are routed through the ESP32-S3 screen. The ESP32 manages the WiFi connection an
 
 ---
 
-## 🔌 Hardware Pinout (Waveshare ESP32-S3-Touch-LCD-7)
+## 🔌 Hardware Pinout (Waveshare ESP32-S3-Touch-LCD-7B)
 
 ### A. Core Interface Pinout
 
@@ -62,8 +63,10 @@ are routed through the ESP32-S3 screen. The ESP32 manages the WiFi connection an
 | **I2C SDA** | `GPIO 8` | Shared I2C Data (PH2.0 4-Pin Header) |
 | **I2C SCL** | `GPIO 9` | Shared I2C Clock (PH2.0 4-Pin Header) |
 | **TP_INT** | `GPIO 4` | GT911 Touch Interrupt |
-| **TP_RST** | `CH422G / Direct` | Touch Reset Line |
-| **LCD RGB** | `RGB565 / ST7262` | 800x480 7.0-inch 16-bit parallel interface |
+| **TP_RST** | `EXIO1` (CH422G) | Touch Reset Line (Active High) |
+| **Backlight (DISP)** | `EXIO2` (CH422G) | LCD Backlight Enable (Active High) |
+| **LCD Power (LCD_VDD_EN)** | `EXIO6` (CH422G) | LCD Power Rail Enable (Active High) |
+| **LCD RGB** | `RGB565` | 1024×600 7.0-inch 16-bit parallel interface |
 | **I2S BCLK** | `GPIO 19` | I2S Bit Clock to MAX98357A |
 | **I2S LRC** | `GPIO 20` | I2S Word Select (WS/LRC) to MAX98357A |
 | **I2S DOUT** | `GPIO 21` | I2S Serial Data Out (DIN) to MAX98357A |
@@ -72,7 +75,7 @@ are routed through the ESP32-S3 screen. The ESP32 manages the WiFi connection an
 ### B. MAX98357A I2S Audio Amplifier Wiring
 
 ```
-[ Waveshare ESP32-S3-Touch-LCD-7 ]             [ MAX98357A I2S Amp ]
+[ Waveshare ESP32-S3-Touch-LCD-7B ]            [ MAX98357A I2S Amp ]
   ├── 5V (or 3.3V) ───────────────────────────────> VIN (5V recommended for 3.2W)
   ├── GND ────────────────────────────────────────> GND
   ├── GPIO 19 (I2S BCLK) ─────────────────────────> BCLK

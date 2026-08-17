@@ -9,11 +9,11 @@
 ## Features & Supported Hardware
 
 - **Hexapod Controller GUI**:
-  - **` 🤖 Hexapod Bot (ESP-32-Touch-LCD) `**: 6-leg 3-DOF robot controller driven by an **ESP-32-Touch-LCD** module featuring an onboard color LCD display, capacitive touch panel, animated robot mascot, 3-DOF Inverse Kinematics (IK), dual PCA9685 I2C servo drivers (18 servos), and **MAX98357A I2S audio amplifier** (mechanical step thuds, robotic servos, startup/shutdown sci-fi sweeps, alert sirens, and 8-bit dance tracks).
-  - **` 🦜 Waveshare 7" Touch-LCD Birds & LED Controller (ESP32-S3-Touch-LCD-7) `**: Unified controller replacing dual Left/Right ESP32s with a **7.0-inch 800x480 Capacitive Touchscreen (GT911)**, an **MCP23017 16-bit I/O Expander Board** for digital on/off outputs (solenoids, LEDs, chirps, motors), **dual PCA9685 I2C Servo Drivers (32 PWM channels)**, **MAX98357A I2S audio amplifier** (natural frequency-modulated bird chirps, trills, parrot squawks, melodic bird songs, and multi-tone symphonies), animated expressive parrot mascot (blinking eyes, singing beak, floating music notes), spotlight sweeping beams, audio spectrum waves, and built-in routines (**Sing & Chirp**, **Spotlight Sweep**, **Turntable Dance**, **Bird Symphony**, **Light Show**).
+  - **` 🤖 Hexapod Bot (Waveshare ESP32-S3-Touch-LCD-7B) `**: 6-leg 3-DOF robot controller driven by a **Waveshare 7.0-inch 1024×600 HD Capacitive Touchscreen (Version B)** with CH422G IO expander, GT911 touch, animated robot mascot, 3-DOF Inverse Kinematics (IK), dual PCA9685 I2C servo drivers (18 servos), and **MAX98357A I2S audio amplifier** (mechanical step thuds, robotic servos, startup/shutdown sci-fi sweeps, alert sirens, and 8-bit dance tracks).
+  - **` 🦜 Waveshare 7B Touch-LCD Birds & LED Controller (ESP32-S3-Touch-LCD-7B) `**: Unified controller driven by a **7.0-inch 1024×600 HD Capacitive Touchscreen (GT911 + CH422G)**, an **MCP23017 16-bit I/O Expander Board** for digital on/off outputs (solenoids, LEDs, chirps, motors), **dual PCA9685 I2C Servo Drivers (32 PWM channels)**, **MAX98357A I2S audio amplifier** (natural frequency-modulated bird chirps, trills, parrot squawks, melodic bird songs, and multi-tone symphonies), animated expressive parrot mascot (blinking eyes, singing beak, floating music notes), spotlight sweeping beams, audio spectrum waves, and built-in routines (**Sing & Chirp**, **Spotlight Sweep**, **Turntable Dance**, **Bird Symphony**, **Light Show**).
   - **` ⚙️ PCA9685 Servo Control `**: Direct pulse and angle sliders for PCA9685 PWM servos across Left and Right drivers.
-  - **` 🚁 Tello Drone (ESP32-S3-Touch-LCD-7 Bridge) `**: Intelligent drone flight controller and HUD visualizer driven by an **ESP32-S3 7.0-inch 800x480 Capacitive Touchscreen (GT911)** with **MAX98357A I2S audio amplifier** (turbine spool-up takeoff sweeps, descending landing touchdown chimes, aerodynamic flip whooshes, HUD radar sonar pings, low-battery alarms, and emergency sirens). Commands from the PC Thinker Window, Gemini Live AI, and the direct 7" touchscreen are animated on the LCD display and routed to the DJI Tello drone over WiFi UDP (`192.168.10.1:8889`), with dynamic quadcopter spinning rotor animations, artificial horizon attitude gauges, altitude meters, battery warning flasher, and live flight telemetry streaming.
-  - **` 🦾 6-DOF Robot Arm (ESP32-S3-Touch-LCD-7B) `**: 6-joint precision servo controller driven by a **Waveshare 7.0-inch 1024x600 HD Capacitive Touchscreen (Version B)** with real-time multi-link kinematic wireframe animation, live joint/Cartesian telemetry, cyber mascot expressions, **MAX98357A I2S audio amplifier** (pneumatic clamp grab & release hisses, industrial servo whine, 4-note pick-and-place success chime, victory fanfare, error alert buzzes), gestures (**Yes/Nod**, **No/Shake**, **High Five**, **Wave**, **Bow**, **Dance**) and demonstration routines (**Pick & Place**).
+  - **` 🚁 Tello Drone (Waveshare ESP32-S3-Touch-LCD-7B Bridge) `**: Intelligent drone flight controller and HUD visualizer driven by an **ESP32-S3 7.0-inch 1024×600 HD Capacitive Touchscreen (GT911 + CH422G)** with **MAX98357A I2S audio amplifier** (turbine spool-up takeoff sweeps, descending landing touchdown chimes, aerodynamic flip whooshes, HUD radar sonar pings, low-battery alarms, and emergency sirens). Commands from the PC Thinker Window, Gemini Live AI, and the direct 7B touchscreen are animated on the LCD display and routed to the DJI Tello drone over WiFi UDP (`192.168.10.1:8889`), with dynamic quadcopter spinning rotor animations, artificial horizon attitude gauges, altitude meters, battery warning flasher, and live flight telemetry streaming.
+  - **` 🦾 6-DOF Robot Arm (Waveshare ESP32-S3-Touch-LCD-7B) `**: 6-joint precision servo controller driven by a **Waveshare 7.0-inch 1024×600 HD Capacitive Touchscreen (Version B)** with CH422G IO expander, real-time multi-link kinematic wireframe animation, live joint/Cartesian telemetry, cyber mascot expressions, **MAX98357A I2S audio amplifier** (pneumatic clamp grab & release hisses, industrial servo whine, 4-note pick-and-place success chime, victory fanfare, error alert buzzes), gestures (**Yes/Nod**, **No/Shake**, **High Five**, **Wave**, **Bow**, **Dance**) and demonstration routines (**Pick & Place**).
 
 - **Unified MAX98357A I2S Audio Hardware Architecture**:
   - All 4 ESP32-S3 Touchscreen hardware projects utilize dedicated hardware I2S pins (`I2S_BCLK = GPIO 19`, `I2S_LRC = GPIO 20`, `I2S_DOUT = GPIO 21`) driving a **MAX98357A Class-D mono audio amplifier** module (3.2W into 4Ω at 5V).
@@ -94,16 +94,16 @@ For detailed GitHub step-by-step instructions, see [`GITHUB_SETUP.md`](GITHUB_SE
 ```
 Hexapod/
 ├── esp32_tello/
-│   ├── esp32_tello.ino         # Waveshare ESP32-S3 7" Touch-LCD Tello Drone Bridge (HUD, Animations & WiFi UDP)
+│   ├── esp32_tello.ino         # Waveshare ESP32-S3-Touch-LCD-7B Tello Drone Bridge (1024x600 HD HUD & WiFi UDP)
 │   └── README.md               # Hardware pinout, WiFi network setup, serial protocol & flashing guide
 ├── esp32_arm/
 │   ├── esp32_arm.ino           # Waveshare ESP32-S3-Touch-LCD-7B 6-DOF Robot Arm firmware (1024x600 HD, 3D IK)
 │   └── README.md               # Hardware pinout, wiring table & telemetry guide
 ├── esp32_hexapod/
-│   ├── esp32_hexapod.ino       # ESP-32-Touch-LCD 6-Leg Hexapod firmware (Touch UI, IK & Dual PCA9685)
+│   ├── esp32_hexapod.ino       # Waveshare ESP32-S3-Touch-LCD-7B 6-Leg Hexapod firmware (1024x600 HD, IK & Dual PCA9685)
 │   └── README.md               # Hardware pinout, wiring table & flashing instructions
 ├── esp32_Birds/
-│   ├── esp32_Birds.ino         # Waveshare 7" Touch-LCD Birds & LED firmware (MCP23017, Dual PCA9685 & Animations)
+│   ├── esp32_Birds.ino         # Waveshare ESP32-S3-Touch-LCD-7B Birds & LED firmware (1024x600 HD, MCP23017 & Dual PCA9685)
 │   └── README.md               # Hardware wiring table, I2C address map & protocol guide
 ├── app.js                      # Web application frontend & Web Serial controller
 ├── index.html                  # Hexapod Multimodal Web Dashboard

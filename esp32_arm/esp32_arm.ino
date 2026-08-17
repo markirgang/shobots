@@ -701,6 +701,9 @@ bool readTouch(int &x, int &y) {
       x = (xHigh << 8) | xLow;
       y = (yHigh << 8) | yLow;
 
+      x = constrain(x, 0, SCREEN_WIDTH - 1);
+      y = constrain(y, 0, SCREEN_HEIGHT - 1);
+
       // Clear buffer flag
       Wire.beginTransmission((uint8_t)TOUCH_I2C_ADDR);
       Wire.write(0x81);

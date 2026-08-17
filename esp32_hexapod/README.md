@@ -1,19 +1,20 @@
-# ESP-32-Touch-LCD 7.0" Capacitive Touchscreen Hexapod Guide
+# Waveshare ESP32-S3-Touch-LCD-7B 6-Leg Hexapod Hardware & Telemetry Guide
 
-This document describes the hardware configuration, pinout mapping, wiring diagrams, and flashing instructions for the 6-leg Hexapod robot running on the **7.0-inch Capacitive Touchscreen ESP32-S3 Module** (**Waveshare ESP32-S3-Touch-LCD-7 / 7B** or **Sunton ESP32-8048S070**), substituted for the standard ESP 32 Devkit.
+This document describes the hardware configuration, pinout mapping, wiring diagrams, and flashing instructions for the 6-leg Hexapod robot running on the **Waveshare ESP32-S3-Touch-LCD-7B (7.0-inch 1024×600 High-Definition Capacitive Touchscreen)** module (Version B), substituted for the standard ESP 32 Devkit.
 
 ---
 
-## 1. Overview & 7.0-Inch Specifications
+## 1. Overview & 7B Specifications
 
-| Feature | Legacy ESP 32 DevKit | **ESP32-S3-Touch-LCD-7 (7.0" Edition)** |
+| Feature | Legacy ESP 32 DevKit | **Waveshare ESP32-S3-Touch-LCD-7B (Version B)** |
 | :--- | :--- | :--- |
-| **Display Panel** | None | **7.0-inch 800×480 High-Resolution RGB Display** |
-| **Touch Controller** | None | **GT911 5-Point Capacitive Multi-Touch (I2C: `0x5D`)** |
-| **Onboard Controls** | None | **800x480 Widescreen Touch Buttons (Stand, Walk, Dance, etc.)** |
+| **Display Panel** | None | **7.0-inch 1024×600 High-Definition IPS RGB Display** |
+| **Touch Controller** | None | **Goodix GT911 5-Point Capacitive Multi-Touch (I2C: `0x5D`)** |
+| **IO Expander** | None | **WCH CH422G (Addresses `0x24`/`0x38`) for Backlight, LCD Power & Touch Reset** |
+| **Onboard Controls** | None | **1024×600 HD Widescreen Touch Buttons (Stand, Walk, Dance, Gestures, Speed)** |
 | **Telemetry & Visuals** | Serial logs | **Live Telemetry, Joint Angles, Speed & Animated Robot Face** |
 | **Audio Output** | None | **MAX98357A I2S Mono Audio Amplifier (BCLK=19, LRC=20, DIN=21)** |
-| **Microcontroller** | ESP32-WROOM | **ESP32-S3-WROOM-1 (16MB Flash, 8MB Octal PSRAM)** |
+| **Microcontroller** | ESP32-WROOM | **ESP32-S3-WROOM-1 (16MB Flash, 8MB Octal PSRAM @ 240MHz)** |
 | **I2C Bus for Servos** | GPIO 21 / 22 | **GPIO 8 (SDA) / GPIO 9 (SCL) via PH2.0 4-Pin I2C Header** |
 
 ---
@@ -21,9 +22,9 @@ This document describes the hardware configuration, pinout mapping, wiring diagr
 ## 2. Hardware Pinout & Wiring
 
 ### A. I2C Bus Connection (Dual PCA9685 Servo Drivers)
-Connect the external Dual PCA9685 servo drivers to the **ESP32-S3-Touch-LCD-7** I2C bus:
+Connect the external Dual PCA9685 servo drivers to the **Waveshare ESP32-S3-Touch-LCD-7B** I2C bus:
 
-| ESP32-S3 7" Touch Pin | Driver 1 (Left Legs - `0x40`) | Driver 2 (Right Legs - `0x41`) | Power Source |
+| ESP32-S3 7B Touch Pin | Driver 1 (Left Legs - `0x40`) | Driver 2 (Right Legs - `0x41`) | Power Source |
 | :--- | :--- | :--- | :--- |
 | **GPIO 8 (SDA)** | SDA | SDA | Logic High (3.3V) |
 | **GPIO 9 (SCL)** | SCL | SCL | Logic High (3.3V) |
@@ -39,7 +40,7 @@ Connect the external Dual PCA9685 servo drivers to the **ESP32-S3-Touch-LCD-7** 
 Connect the **MAX98357A I2S Mono Class-D Audio Amplifier** module:
 
 ```
-[ Waveshare ESP32-S3-Touch-LCD-7 ]             [ MAX98357A I2S Amp ]
+[ Waveshare ESP32-S3-Touch-LCD-7B ]            [ MAX98357A I2S Amp ]
   ├── 5V (or 3.3V) ───────────────────────────────> VIN (5V recommended for 3.2W)
   ├── GND ────────────────────────────────────────> GND
   ├── GPIO 19 (I2S BCLK) ─────────────────────────> BCLK
@@ -56,16 +57,18 @@ Connect the **MAX98357A I2S Mono Class-D Audio Amplifier** module:
 | **I2S LRC** | **GPIO 20** | Word Select (WS / LRCLK) |
 | **I2S DOUT** | **GPIO 21** | Serial Data (DIN on MAX98357A) |
 
-### C. Onboard 7-Inch Display & Touch Controller Pinout (Waveshare 7" / 7B)
+### C. Onboard Display, Touch & IO Expander Pinout (Waveshare 7B)
 
-| Function | ESP32-S3 Pin | Description |
+| Function | Pin / Address | Description |
 | :--- | :--- | :--- |
-| **GT911 SDA** | GPIO 8 | I2C Data (Shared with PCA9685 header) |
-| **GT911 SCL** | GPIO 9 | I2C Clock (Shared with PCA9685 header) |
-| **GT911 INT** | GPIO 4 | Capacitive Touch Interrupt |
-| **GT911 RST** | IO Expander / CH422G | Touch Reset line |
-| **RGB LCD Data** | GPIO 1-3, 10-18, 38-45 | 16-bit parallel RGB ST7262 interface |
-| **Backlight (BL)** | GPIO 6 (or PWM) | Adjustable LCD Backlight |
+| **GT911 SDA** | `GPIO 8` | I2C Data (Shared with PCA9685 header) |
+| **GT911 SCL** | `GPIO 9` | I2C Clock (Shared with PCA9685 header) |
+| **GT911 INT** | `GPIO 4` | Capacitive Touch Interrupt |
+| **GT911 RST** | `EXIO1` (CH422G) | Touch Reset line (Active High) |
+| **Backlight (DISP)** | `EXIO2` (CH422G) | LCD Backlight Enable (Active High) |
+| **LCD Power (LCD_VDD_EN)** | `EXIO6` (CH422G) | LCD Power Rail Enable (Active High) |
+| **Display RGB Data** | `GPIO 0-2, 10, 14, 17, 18, 21, 38-42, 45, 47, 48` | 16-bit parallel RGB interface (1024×600) |
+| **Display Sync** | `GPIO 7` (PCLK), `GPIO 3` (VSYNC), `GPIO 46` (HSYNC), `GPIO 5` (DE) | RGB Timing & Clock Signals |
 
 ---
 
@@ -104,7 +107,7 @@ Connect the **MAX98357A I2S Mono Class-D Audio Amplifier** module:
 ## 4. Flashing Firmware (Arduino IDE / PlatformIO)
 
 1. Open `esp32_hexapod/esp32_hexapod.ino` in **Arduino IDE**.
-2. Select Board: **ESP32S3 Dev Module** (or **Waveshare ESP32-S3-Touch-LCD-7**).
+2. Select Board: **ESP32S3 Dev Module** (or **Waveshare ESP32-S3-Touch-LCD-7B**).
 3. Board Settings:
    - **USB CDC On Boot**: *Enabled*
    - **Flash Size**: *16MB (128Mb)*
@@ -114,10 +117,10 @@ Connect the **MAX98357A I2S Mono Class-D Audio Amplifier** module:
 
 ---
 
-## 5. Controlling the 7-Inch Hexapod
+## 5. Controlling the 7B Hexapod
 
-- **Direct Widescreen Touch**: Tap any button on the 800x480 touchscreen (`STAND`, `SIT`, `FLAT`, `BOW`, `WALK`, `RUN`, `DANCE`, `WAVE LEFT`, `WAVE RIGHT`, `TURN LEFT`, `TURN RIGHT`, `STOP`, `SPEED +/-`).
-- **Python GUI / Gemini AI**: Connect via Bluetooth (`hexapod-touch-7` or USB COM port) and control verbally or via GUI sliders in `main.py`.
+- **Direct HD Touchscreen**: Tap any button on the 1024×600 touchscreen (`STAND`, `SIT`, `FLAT`, `BOW`, `WALK`, `RUN`, `DANCE`, `WAVE LEFT`, `WAVE RIGHT`, `TURN LEFT`, `TURN RIGHT`, `STOP`, `SPEED +/-`, `SPEECH: ON`).
+- **Python GUI / Gemini AI**: Connect via Bluetooth (`hexapod-touch-7b` or USB COM port) and control verbally or via GUI sliders in `main.py` and `app.js`.
 
 ---
 
@@ -139,4 +142,5 @@ Connect the **MAX98357A I2S Mono Class-D Audio Amplifier** module:
 | `AUDIO:CLICK` | `AUDIO:CLICK` | Plays UI button click feedback tone |
 | `AUDIO:TONE:<f>:<ms>` | `AUDIO:TONE:1000:150` | Plays sine tone at frequency `f` (Hz) for `ms` |
 | `AUDIO:VOL:<0-100>` | `AUDIO:VOL:85` | Sets MAX98357A audio amplifier volume percentage |
-| `AUDIO:MUTE:<1\|0>` | `AUDIO:MUTE:1` | Mutes or unmutes audio output |
+| `AUDIO:MUTE:<1|0>` | `AUDIO:MUTE:1` | Mutes or unmutes audio output |
+
