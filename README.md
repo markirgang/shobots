@@ -1,6 +1,6 @@
 # Hexapod Controller - Multimodal AI Robotics & Control Suite
 
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/markirgang/Hexapod)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/markirgang/shobots)
 
 **Hexapod Controller** is a real-time multimodal AI robotics application powered by Google's Gemini Multimodal Live API. It provides voice and video interaction with local hardware components including ESP-32-Touch-LCD microcontrollers, PCA9685 I2C servo drivers, a 6-DOF Robot Arm, a 6-leg Hexapod Robot over Bluetooth / Serial, a Tello drone over UDP, and smart home devices.
 
@@ -38,7 +38,7 @@
 
 3. **Install Dependencies**:
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements-python.txt
    ```
 
 4. **Configure API Keys**:
