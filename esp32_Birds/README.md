@@ -1,6 +1,6 @@
-# Waveshare ESP32-S3-Touch-LCD-7B Birds & LED Controller Hardware Guide
+# Waveshare ESP32-S3-Touch-LCD-7C Birds & LED Controller Hardware Guide
 
-Firmware for the **Waveshare ESP32-S3-Touch-LCD-7B** (7.0-inch 1024×600 High-Definition Capacitive Touchscreen, GT911 controller, CH422G IO Expander) replacing the dual ESP32 DevKits (Left and Right boards) with a single high-performance multimodal controller featuring an **MCP23017 16-Bit I/O Expander Board**, **Dual PCA9685 16-Channel I2C Servo Drivers** (32 PWM channels total), and a **Microphone Sound Detection Module** for AI speech animatronics.
+Firmware for the **Waveshare ESP32-S3-Touch-LCD-7C** (7.0-inch 1024×600 High-Definition Capacitive Touchscreen, GT911 controller, CH422G IO Expander) replacing the dual ESP32 DevKits (Left and Right boards) with a single high-performance multimodal controller featuring an **MCP23017 16-Bit I/O Expander Board**, **Dual PCA9685 16-Channel I2C Servo Drivers** (32 PWM channels total), and a **Microphone Sound Detection Module** for AI speech animatronics.
 
 ---
 
@@ -39,7 +39,7 @@ Firmware for the **Waveshare ESP32-S3-Touch-LCD-7B** (7.0-inch 1024×600 High-De
 
 ## 🔌 Hardware Wiring & I2C Address Map
 
-All peripherals share the high-speed I2C bus and dedicated I2S audio pins on the Waveshare ESP32-S3-Touch-LCD-7B:
+All peripherals share the high-speed I2C bus and dedicated I2S audio pins on the Waveshare ESP32-S3-Touch-LCD-7C:
 
 | Peripheral / Interface | Signal / Address | ESP32-S3 Pin | Notes |
 |---|---|---|---|
@@ -58,30 +58,17 @@ All peripherals share the high-speed I2C bus and dedicated I2S audio pins on the
 
 ---
 
-## 🔊 MAX98357A I2S Mono Audio Amplifier Wiring
+## 🔊 Onboard Waveshare ESP32-S3-Touch-LCD-7C Audio Hardware
 
-Connect the **MAX98357A I2S Mono Class-D Audio Amplifier** module:
+The **Waveshare ESP32-S3-Touch-LCD-7C** includes **built-in onboard audio hardware** (I2S audio codec / Class-D power amplifier circuit and onboard speaker connector). **No external audio amplifier module is required.**
 
 ```
-[ Waveshare ESP32-S3-Touch-LCD-7 ]             [ MAX98357A I2S Amp ]
-  ├── 5V (or 3.3V) ───────────────────────────────> VIN (5V recommended for 3.2W)
-  ├── GND ────────────────────────────────────────> GND
-  ├── GPIO 19 (I2S BCLK) ─────────────────────────> BCLK
-  ├── GPIO 20 (I2S LRC / WS) ─────────────────────> LRC
-  └── GPIO 21 (I2S DOUT) ─────────────────────────> DIN
-                                                    GAIN ───> Open (9dB Default) or GND (6dB)
-                                                    SD_MODE > Open / Float (L+R Mono Mix)
-                                                    [ + / - ] ──> 4Ω - 8Ω 2W-3W Speaker
+[ Waveshare ESP32-S3-Touch-LCD-7C Onboard PCB ]
+  ├── Onboard I2S BCLK  ─> GPIO 19
+  ├── Onboard I2S LRC   ─> GPIO 20
+  ├── Onboard I2S DOUT  ─> GPIO 21
+  └── Onboard Speaker Header ──> Connect directly to 8Ω 1W / 4Ω 2W Mini Speaker
 ```
-
-### MAX98357A Gain Settings
-| GAIN Pin Connection | Amplifier Gain | Best For |
-|---|---|---|
-| 100kΩ to GND | 3 dB | Very low distortion / Sensitive transducers |
-| Connected to GND | 6 dB | Small 8Ω speakers |
-| **Unconnected / Floating (Default)** | **9 dB** | **Standard 4Ω–8Ω 2W–3W mini speakers (Recommended)** |
-| Connected to VDD (3.3V/5V) | 12 dB | Higher output volume |
-| 100kΩ to VDD | 15 dB | Maximum amplification |
 
 ---
 

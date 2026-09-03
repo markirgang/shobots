@@ -1,14 +1,14 @@
-# Waveshare ESP32-S3-Touch-LCD-7B Tello Drone Bridge & HUD Hardware Guide
+# Waveshare ESP32-S3-Touch-LCD-7C Tello Drone Bridge & HUD Hardware Guide
 
 **Folder:** `esp32_tello/`  
 **Sketch:** `esp32_tello.ino`  
-**Hardware:** Waveshare ESP32-S3-Touch-LCD-7B (7.0" 1024×600 High-Definition Capacitive Touchscreen, GT911 Touch Controller, CH422G IO Expander)
+**Hardware:** Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024×600 High-Definition Capacitive Touchscreen, GT911 Touch Controller, CH422G IO Expander)
 
 ---
 
 ## 🌟 Overview
 
-The **Waveshare ESP32-S3-Touch-LCD-7B Tello Bridge & HUD** firmware transforms the Waveshare ESP32-S3 7.0-inch 1024×600 HD Touch LCD into an intelligent flight command bridge, dynamic HUD visualizer, and flight telemetry dashboard for the DJI Tello drone.
+The **Waveshare ESP32-S3-Touch-LCD-7C Tello Bridge & HUD** firmware transforms the Waveshare ESP32-S3 7.0-inch 1024×600 HD Touch LCD into an intelligent flight command bridge, dynamic HUD visualizer, and flight telemetry dashboard for the DJI Tello drone.
 
 Instead of the PC communicating over raw UDP sockets directly to the drone, all commands from:
 1. **The Thinker Window (PC Tkinter GUI Tab)**
@@ -54,7 +54,7 @@ are routed through the ESP32-S3 screen. The ESP32 manages the WiFi connection an
 
 ---
 
-## 🔌 Hardware Pinout (Waveshare ESP32-S3-Touch-LCD-7B)
+## 🔌 Hardware Pinout (Waveshare ESP32-S3-Touch-LCD-7C)
 
 ### A. Core Interface Pinout
 
@@ -67,23 +67,21 @@ are routed through the ESP32-S3 screen. The ESP32 manages the WiFi connection an
 | **Backlight (DISP)** | `EXIO2` (CH422G) | LCD Backlight Enable (Active High) |
 | **LCD Power (LCD_VDD_EN)** | `EXIO6` (CH422G) | LCD Power Rail Enable (Active High) |
 | **LCD RGB** | `RGB565` | 1024×600 7.0-inch 16-bit parallel interface |
-| **I2S BCLK** | `GPIO 19` | I2S Bit Clock to MAX98357A |
-| **I2S LRC** | `GPIO 20` | I2S Word Select (WS/LRC) to MAX98357A |
-| **I2S DOUT** | `GPIO 21` | I2S Serial Data Out (DIN) to MAX98357A |
+| **I2S BCLK** | `GPIO 19` | Onboard I2S Bit Clock |
+| **I2S LRC** | `GPIO 20` | Onboard I2S Word Select (WS/LRC) |
+| **I2S DOUT** | `GPIO 21` | Onboard I2S Serial Data Out (DIN) |
 | **USB CDC** | `USB Native / Type-C` | Host Serial PC Link (115200 baud) |
 
-### B. MAX98357A I2S Audio Amplifier Wiring
+### B. Onboard Waveshare ESP32-S3-Touch-LCD-7C Audio Hardware
+
+The **Waveshare ESP32-S3-Touch-LCD-7C** includes **built-in onboard audio hardware** (I2S audio codec / Class-D power amplifier circuit and onboard speaker connector). **No external audio amplifier module is required.**
 
 ```
-[ Waveshare ESP32-S3-Touch-LCD-7B ]            [ MAX98357A I2S Amp ]
-  ├── 5V (or 3.3V) ───────────────────────────────> VIN (5V recommended for 3.2W)
-  ├── GND ────────────────────────────────────────> GND
-  ├── GPIO 19 (I2S BCLK) ─────────────────────────> BCLK
-  ├── GPIO 20 (I2S LRC / WS) ─────────────────────> LRC
-  └── GPIO 21 (I2S DOUT) ─────────────────────────> DIN
-                                                    GAIN ───> Open (9dB Default) or GND (6dB)
-                                                    SD_MODE > Open / Float (L+R Mono Mix)
-                                                    [ + / - ] ──> 4Ω - 8Ω 2W-3W Speaker
+[ Waveshare ESP32-S3-Touch-LCD-7C Onboard PCB ]
+  ├── Onboard I2S BCLK  ─> GPIO 19
+  ├── Onboard I2S LRC   ─> GPIO 20
+  ├── Onboard I2S DOUT  ─> GPIO 21
+  └── Onboard Speaker Header ──> Connect directly to 8Ω 1W / 4Ω 2W Mini Speaker
 ```
 
 ---

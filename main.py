@@ -584,7 +584,7 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         types.FunctionDeclaration(
             name="control_robot_arm",
             description=(
-                "Controls a 6 degrees of freedom (6-DOF) Robot Arm driven by a Waveshare ESP32-S3-Touch-LCD-7B (7.0-inch 1024x600 HD Capacitive Touchscreen with live telemetry and animation) via a PCA9685 servo driver. "
+                "Controls a 6 degrees of freedom (6-DOF) Robot Arm driven by a Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 1024x600 HD Capacitive Touchscreen with live telemetry and animation) via a PCA9685 servo driver. "
                 "Allows triggering gestures ('yes', 'no', 'high_five', 'wave', 'bow', 'dance'), "
                 "executing preset demonstration motions ('home', 'rest', 'reach', 'pick_and_place', 'open_gripper', 'close_gripper', 'stop'), "
                 "setting individual joint angles (channel 0: Base, 1: Shoulder, 2: Elbow, 3: Wrist Pitch, 4: Wrist Roll, 5: Gripper), "
@@ -638,6 +638,66 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         )
     )
 
+    function_declarations.append(
+        types.FunctionDeclaration(
+            name="control_wave_rover",
+            description=(
+                "Controls the Waveshare Wave Rover 4WD mobile robot platform powered by ESP32-S3 (over Serial / Bluetooth 'wave-rover' / WiFi). "
+                "Supports movement ('forward', 'back', 'turn_left', 'turn_right', 'spin_left', 'spin_right', 'stop'), "
+                "L298N (LM298) DC Mouth Motor ('mouth_open', 'mouth_close'), L298N DC Body Motion Motor ('body_on', 'body_off'), "
+                "Eye LEDs ('eyes_on', 'eyes_off'), drive speed (0-100%), pan-tilt camera angles (pan, tilt 0-180 deg), "
+                "headlights ('headlight_on', 'headlight_off'), preset routines ('patrol', 'spin_360', 'dance', 'obstacle_avoidance'), "
+                "and custom status messages on the onboard touch screen."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "Action: 'forward', 'back', 'turn_left', 'turn_right', 'spin_left', 'spin_right', 'stop', 'mouth_open', 'mouth_close', 'body_on', 'body_off', 'eyes_on', 'eyes_off', 'headlight_on', 'headlight_off', 'set_speed', 'set_pan_tilt', 'patrol', 'spin_360', 'dance', 'obstacle_avoidance', 'set_lcd_message'."
+                    },
+                    "speed": {
+                        "type": "integer",
+                        "description": "Drive speed percentage (0 to 100)."
+                    },
+                    "pan": {
+                        "type": "integer",
+                        "description": "Pan-tilt camera pan angle in degrees (0 to 180)."
+                    },
+                    "tilt": {
+                        "type": "integer",
+                        "description": "Pan-tilt camera tilt angle in degrees (0 to 180)."
+                    },
+                    "mouth": {
+                        "type": "boolean",
+                        "description": "True to power ON (open) DC mouth motor, False to power OFF (close) DC mouth motor."
+                    },
+                    "body_motion": {
+                        "type": "boolean",
+                        "description": "True to power ON DC body motor (sways body up and down), False to power OFF."
+                    },
+                    "eye_leds": {
+                        "type": "boolean",
+                        "description": "True to turn Eye LEDs ON, False to turn OFF."
+                    },
+                    "headlight": {
+                        "type": "boolean",
+                        "description": "True to turn headlights ON, False to turn OFF."
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "description": "Movement duration in milliseconds (default 300)."
+                    },
+                    "lcd_message": {
+                        "type": "string",
+                        "description": "Custom status message to display on the Wave Rover's LCD screen."
+                    }
+                },
+                "required": ["action"]
+            }
+        )
+    )
+
     # Add Parrot Selection & Sound Reactivity tool
     function_declarations.append(
         types.FunctionDeclaration(
@@ -684,14 +744,14 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
             description=(
                 "Controls AI speech reactivity across robots. Choose which robots react when the AI speaks: "
                 "'birds' (mouth moves & LED eyes blink), 'hexapod' (LED eyes blink & body sways), "
-                "'arm' (conversational gestures), or 'all' (all robots react)."
+                "'arm' (conversational gestures), 'rover' (DC mouth opens, body sways up/down, eye LEDs flash), or 'all' (all robots react)."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "robot": {
                         "type": "string",
-                        "description": "Target robot: 'birds', 'hexapod', 'arm', or 'all'."
+                        "description": "Target robot: 'birds', 'hexapod', 'arm', 'rover', or 'all'."
                     },
                     "enabled": {
                         "type": "boolean",
@@ -707,10 +767,11 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         types.FunctionDeclaration(
             name="play_hardware_sound",
             description=(
-                "Plays procedural audio sound effects on the MAX98357A I2S Audio Amplifier attached to any of the 4 ESP32-S3 Touchscreen hardware boards: "
+                "Plays procedural audio sound effects on the MAX98357A I2S Audio Amplifier attached to any of the 5 ESP32-S3 Touchscreen hardware boards: "
                 "'birds' (chirp, squawk, trill, melody, symphony, beep), "
                 "'hexapod' (step, startup, shutdown, alert, dance, r2d2, servo, click), "
                 "'arm' (claw_grab, claw_release, servo, chime, error, fanfare, beep), "
+                "'rover'/'waverover' (rover_engine, horn, startup, shutdown, alert, turbo, brake), "
                 "or 'tello'/'drone' (takeoff, land, flip, radar, alarm, siren, connect). "
                 "Can also set volume (0-100)."
             ),
@@ -719,11 +780,11 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
                 "properties": {
                     "device": {
                         "type": "string",
-                        "description": "Target hardware device: 'birds', 'hexapod', 'arm', 'drone' (or 'tello')."
+                        "description": "Target hardware device: 'birds', 'hexapod', 'arm', 'rover' (or 'waverover'), 'drone' (or 'tello')."
                     },
                     "sound": {
                         "type": "string",
-                        "description": "Sound name to play (e.g. 'chirp', 'squawk', 'step', 'startup', 'claw_grab', 'chime', 'takeoff', 'land', 'flip', 'radar', 'fanfare', etc.)."
+                        "description": "Sound name to play (e.g. 'chirp', 'squawk', 'step', 'startup', 'rover_engine', 'horn', 'claw_grab', 'chime', 'takeoff', 'land', 'flip', 'radar', 'fanfare', etc.)."
                     },
                     "volume": {
                         "type": "integer",
@@ -742,9 +803,10 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         "You are a helpful real-time multimodal voice assistant running on the user's local computer. "
         "You have direct access to local hardware and smart devices: an onboard LED of an ESP32 microcontroller, "
         "a 6-leg Hexapod robot powered by the ESP-32-Touch-LCD controller (Bluetooth: 'hexapod-touch-lcd' / Serial) with an onboard interactive touch screen, "
-        "a 6-DOF Robot Arm powered by a Waveshare ESP32-S3-Touch-LCD-7B (7.0-inch 1024x600 HD Capacitive Touchscreen with live telemetry & animation) via PCA9685, "
+        "a 6-DOF Robot Arm powered by a Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 1024x600 HD Capacitive Touchscreen with live telemetry & animation) via PCA9685, "
         "a Birds & LED stage controller powered by a unified Waveshare ESP32-S3-Touch-LCD-7 (7.0-inch 800x480 Capacitive Touchscreen with MCP23017 I/O Expander, Dual PCA9685 Servo Drivers, animated parrot mascot, and light shows), "
-        "a Tello drone, Leviton smart lights, and eWeLink (Sonoff) devices. All 4 ESP32-S3 touchscreen controllers are equipped with MAX98357A I2S Class-D mono audio amplifiers.\n\n"
+        "a Waveshare Wave Rover 4WD mobile platform (with L298N DC mouth motor, DC body motion motor, eye LEDs, pan-tilt camera, and MAX98357A I2S audio), "
+        "a Tello drone, Leviton smart lights, and eWeLink (Sonoff) devices. All 5 ESP32-S3 touchscreen controllers are equipped with MAX98357A I2S Class-D mono audio amplifiers.\n\n"
         "1. VISUAL MODALITY AWARENESS:\n"
         "   - You are receiving a continuous, real-time video stream (from the user's webcam or screen share).\n"
         "   - Pay close attention to what you see. You MUST proactively notice, react to, and comment on objects, gestures, text, or visual changes shown in the video feed. Do NOT wait for the user to prompt you or say they are showing you something; describe what you see naturally as part of the conversation.\n"
@@ -753,9 +815,10 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         "   - The video stream is sent to you at exactly 1 frame per second (1 FPS). Each frame you receive represents exactly 1 second of real time.\n"
         "   - When estimating time or counting seconds (e.g., if the user asks you to wait 5 seconds, count seconds, or track time), use the number of incoming frames as your clock (e.g. 5 frames = 5 seconds). Do not rush or estimate time based on text-generation speeds; wait for the appropriate amount of time to pass.\n\n"
         "3. HARDWARE CONTROL:\n"
-        "   - MAX98357A Hardware Audio: You MUST use the `play_hardware_sound` tool when the user asks verbally to play hardware sounds, bird chirps/songs, hexapod droid chatter/steps, robot arm grab/release chimes, or drone radar pings/takeoff audio on any of the 4 ESP32 touchscreen modules.\n"
+        "   - MAX98357A Hardware Audio: You MUST use the `play_hardware_sound` tool when the user asks verbally to play hardware sounds, bird chirps/songs, hexapod droid chatter/steps, robot arm grab/release chimes, rover engine/horn sounds, or drone radar pings/takeoff audio on any of the ESP32 touchscreen modules.\n"
         "   - Bird Routines & Animations: You MUST use the `trigger_bird_routine` tool when the user asks verbally or visually to perform singing ('sing'), spotlight sweeping ('sweep'), turntable dancing ('dance'), light shows ('lightshow'), bird symphony ('symphony'), or return to home ('home') on the Waveshare 7-inch Touch LCD controller.\n"
-        "   - Robot Arm: You MUST use the `control_robot_arm` tool when the user asks verbally or visually to control the 6-DOF robot arm powered by the Waveshare ESP32-S3-Touch-LCD-7B, perform gestures like 'yes', 'no', 'high_five', 'wave', 'bow', 'dance', execute pick & place, or set arm joint angles.\n"
+        "   - Waveshare Wave Rover: You MUST use the `control_wave_rover` tool when the user asks verbally or visually to drive forward/back, turn, spin, patrol, move pan-tilt camera, control headlights, open/close the DC mouth motor (L298N), turn on/off the body up/down motor, toggle Eye LEDs, or display status messages on the Waveshare Wave Rover 4WD mobile platform.\n"
+        "   - Robot Arm: You MUST use the `control_robot_arm` tool when the user asks verbally or visually to control the 6-DOF robot arm powered by the Waveshare ESP32-S3-Touch-LCD-7C, perform gestures like 'yes', 'no', 'high_five', 'wave', 'bow', 'dance', execute pick & place, or set arm joint angles.\n"
         "   - Hexapod Robot: You MUST use the `control_hexapod` tool when the user asks verbally or visually to control the 6-leg hexapod robot powered by the ESP-32-Touch-LCD (e.g. walk, run, wave left arm, wave right arm, dance, sit, stand, flat to floor, turn left, turn right, bow, set leg joints, or display messages on the robot's screen).\n"
         "   - ESP32 PCA9685 Servos: You MUST use the `set_servo_angle` tool when the user asks verbally or visually to move, position, turn, or adjust any of the servos on the Birds ESP32-S3 Touchscreen (Left/Right sides) or Arm ESP32 (e.g. Left/Right Parrot Up/Dn, Right Spotlight Rotate, Center Bird Up/Dn, Center Turntable Rotate, Base/Shoulder/Elbow, etc.) to a specific degree angle (0 to 180 degrees).\n"
         "   - ESP32 LED: You MUST use the `set_led_state` tool to turn the LED on or off. If the user asks you to pulse, blink, or flash the LED a certain number of times (e.g., to match the count of fingers you see in the frame), you MUST use the `pulse_led` tool with the appropriate count.\n"
@@ -951,7 +1014,7 @@ def load_esp32_button_config():
 
 def scan_and_autodetect_esp32_ports():
     """
-    Scans system serial ports for connected ESP32, Waveshare 7" Touch-LCD (Birds / Arm / Tello), or Hexapod ESP-32-Touch-LCD devices.
+    Scans system serial ports for connected ESP32, Waveshare 7" Touch-LCD (Birds / Arm / Tello / Wave Rover), or Hexapod ESP-32-Touch-LCD devices.
     Returns:
       display_options: list of human-readable labels for Comboboxes
       device_map: dict mapping label -> raw device name (e.g. 'COM3')
@@ -959,6 +1022,7 @@ def scan_and_autodetect_esp32_ports():
       detected_hexapod_label: label for auto-detected Hexapod ESP-32-Touch-LCD
       detected_arm_label: label for auto-detected Arm ESP32
       detected_tello_label: label for auto-detected Tello ESP32-S3 7" Touch LCD Screen
+      detected_rover_label: label for auto-detected Waveshare Wave Rover Mobile Platform
     """
     esp32_keywords = [
         "cp210", "ch340", "ch341", "ft232", "esp32", "usb-serial", "usb serial",
@@ -972,6 +1036,7 @@ def scan_and_autodetect_esp32_ports():
     hexapod_specific_label = None
     birds_specific_label = None
     arm_specific_label = None
+    rover_specific_label = None
 
     try:
         import serial.tools.list_ports
@@ -989,6 +1054,9 @@ def scan_and_autodetect_esp32_ports():
             elif "arm" in comb or "robot arm" in comb:
                 label = f"{dev} - ESP32 Robot Arm ({desc})"
                 arm_specific_label = label
+            elif "rover" in comb or "waverover" in comb:
+                label = f"{dev} - Waveshare Wave Rover ({desc})"
+                rover_specific_label = label
             elif "bird" in comb:
                 label = f"{dev} - Birds ESP32-S3 Touchscreen ({desc})"
                 birds_specific_label = label
@@ -1012,8 +1080,9 @@ def scan_and_autodetect_esp32_ports():
     detected_hexapod_label = hexapod_specific_label or (esp32_candidate_labels[1] if len(esp32_candidate_labels) > 1 else (esp32_candidate_labels[0] if len(esp32_candidate_labels) > 0 else "None (Simulation Mode)"))
     detected_arm_label = arm_specific_label or (esp32_candidate_labels[2] if len(esp32_candidate_labels) > 2 else (esp32_candidate_labels[1] if len(esp32_candidate_labels) > 1 else "None (Simulation Mode)"))
     detected_tello_label = tello_specific_label or (esp32_candidate_labels[3] if len(esp32_candidate_labels) > 3 else (esp32_candidate_labels[0] if len(esp32_candidate_labels) > 0 else "None (Simulation Mode)"))
+    detected_rover_label = rover_specific_label or (esp32_candidate_labels[4] if len(esp32_candidate_labels) > 4 else (esp32_candidate_labels[0] if len(esp32_candidate_labels) > 0 else "None (Simulation Mode)"))
 
-    return display_options, device_map, detected_birds_label, detected_hexapod_label, detected_arm_label, detected_tello_label
+    return display_options, device_map, detected_birds_label, detected_hexapod_label, detected_arm_label, detected_tello_label, detected_rover_label
 
 
 def scan_bluetooth_ports():
@@ -1657,6 +1726,161 @@ class RobotArmController:
         self.current_motion = "idle"
 
 
+class WaveRoverController:
+    """
+    Controller for Waveshare Wave Rover 4WD Mobile Platform powered by ESP32-S3 (or Waveshare ESP32-S3-Touch-LCD-7C).
+    Features:
+      - 4WD Differential Drive (forward, back, turn_left, turn_right, spin_left, spin_right, stop)
+      - L298N (LM298) Motor Controller Integration:
+          * DC Mouth Motor: Power ON = Open Mouth; Power OFF = Closed Mouth
+          * DC Body Motion Motor: Power ON = Body sways up and down
+      - Eye LEDs Output: Digital GPIO Output for Eye LEDs (ON, OFF, Blink, Pulse)
+      - Pan-Tilt Camera Servos (Pan 0-180°, Tilt 0-180°)
+      - Front Headlights LED
+      - Onboard Touch LCD Status Messages
+      - Preset Routines: patrol, spin_360, dance, obstacle_avoidance
+      - Onboard MAX98357A I2S Audio Synthesis
+    """
+    def __init__(self, port=None, audio_loop=None):
+        self.port = port
+        self.audio_loop = audio_loop
+        self.serial_conn = None
+        self.simulated = True
+        self.connected_device = "Not Connected"
+        
+        self.mouth_state = False       # False = Closed (power off), True = Open (power on)
+        self.body_motor_state = False  # False = Off, True = On (body sways up/down)
+        self.eye_leds_state = True     # True = ON, False = OFF
+        self.headlight_state = False  # True = ON, False = OFF
+        self.speed = 75                # 0 - 100%
+        self.pan_angle = 90            # 0 - 180 deg
+        self.tilt_angle = 90           # 0 - 180 deg
+        self.current_motion = "idle"
+        self.gui_window = None
+
+    def connect(self, port=None):
+        import serial
+        if port is not None:
+            self.port = port
+
+        if self.port in (None, "None (Simulation Mode)", "None"):
+            self.simulated = True
+            self.connected_device = "Simulation Mode"
+            if self.serial_conn and self.serial_conn.is_open:
+                try:
+                    self.serial_conn.close()
+                except Exception:
+                    pass
+            self.serial_conn = None
+            return True, "Waveshare Wave Rover set to Simulation Mode"
+
+        try:
+            target = self.port
+            if target.upper().startswith("COM") or target.startswith("/dev/"):
+                conn = serial.Serial()
+                conn.port = target
+                conn.baudrate = 115200
+                conn.timeout = 1
+                conn.open()
+                self.serial_conn = conn
+                self.simulated = False
+                self.connected_device = f"Waveshare Wave Rover ({target})"
+                return True, f"Connected to Waveshare Wave Rover on {target}"
+            else:
+                self.simulated = True
+                self.connected_device = f"Waveshare Wave Rover '{target}' (Simulated)"
+                return True, f"Waveshare Wave Rover ('{target}') connected (Simulated mode)"
+        except Exception as e:
+            self.simulated = True
+            self.connected_device = f"Simulation Mode (Error: {e})"
+            return True, f"Waveshare Wave Rover fallback to Simulation Mode ({e})"
+
+    def send_command(self, cmd_str: str):
+        if not cmd_str.endswith("\r\n"):
+            cmd_str += "\r\n"
+        if self.serial_conn and self.serial_conn.is_open:
+            try:
+                self.serial_conn.write(cmd_str.encode("utf-8"))
+                self.serial_conn.flush()
+                print(f"[Wave Rover Sent] {cmd_str.strip()}")
+            except Exception as e:
+                print(f"[Wave Rover Error] {e}")
+        else:
+            print(f"[Simulated Wave Rover] {cmd_str.strip()}")
+
+    def set_mouth_state(self, open_mouth: bool):
+        self.mouth_state = bool(open_mouth)
+        cmd = f"ROVER:MOUTH:{1 if self.mouth_state else 0}\r\n"
+        self.send_command(cmd)
+        return {"status": "success", "mouth_open": self.mouth_state, "message": f"DC Mouth Motor {'Power ON (Open)' if self.mouth_state else 'Power OFF (Closed)'}"}
+
+    def set_body_motor_state(self, enable_body: bool):
+        self.body_motor_state = bool(enable_body)
+        cmd = f"ROVER:BODY:{1 if self.body_motor_state else 0}\r\n"
+        self.send_command(cmd)
+        return {"status": "success", "body_motor": self.body_motor_state, "message": f"DC Body Up/Down Motor {'Power ON' if self.body_motor_state else 'Power OFF'}"}
+
+    def set_eye_leds(self, enable_eyes: bool):
+        self.eye_leds_state = bool(enable_eyes)
+        cmd = f"ROVER:EYES:{1 if self.eye_leds_state else 0}\r\n"
+        self.send_command(cmd)
+        return {"status": "success", "eye_leds": self.eye_leds_state, "message": f"Eye LEDs {'ON' if self.eye_leds_state else 'OFF'}"}
+
+    def set_headlight(self, enable_headlight: bool):
+        self.headlight_state = bool(enable_headlight)
+        cmd = f"ROVER:LED:{1 if self.headlight_state else 0}\r\n"
+        self.send_command(cmd)
+        return {"status": "success", "headlight": self.headlight_state, "message": f"Headlights {'ON' if self.headlight_state else 'OFF'}"}
+
+    def set_speed(self, speed: int):
+        self.speed = max(0, min(100, int(speed)))
+        cmd = f"ROVER:SPEED:{self.speed}\r\n"
+        self.send_command(cmd)
+        return {"status": "success", "speed": self.speed}
+
+    def set_pan_tilt(self, pan: int = None, tilt: int = None):
+        if pan is not None: self.pan_angle = max(0, min(180, int(pan)))
+        if tilt is not None: self.tilt_angle = max(0, min(180, int(tilt)))
+        cmd = f"ROVER:PANTILT:{self.pan_angle}:{self.tilt_angle}\r\n"
+        self.send_command(cmd)
+        return {"status": "success", "pan": self.pan_angle, "tilt": self.tilt_angle}
+
+    def set_lcd_message(self, message: str):
+        cmd = f"ROVER:LCD:MSG:{message}\r\n"
+        self.send_command(cmd)
+        return {"status": "success", "message": message}
+
+    def execute_action(self, action_name: str, **kwargs) -> dict:
+        action = action_name.lower().replace(" ", "_")
+        self.current_motion = action
+
+        # Check for L298N DC mouth motor / body motor / eye LED actions
+        if action in ("mouth_open", "open_mouth"):
+            return self.set_mouth_state(True)
+        elif action in ("mouth_close", "close_mouth"):
+            return self.set_mouth_state(False)
+        elif action in ("body_on", "start_body"):
+            return self.set_body_motor_state(True)
+        elif action in ("body_off", "stop_body"):
+            return self.set_body_motor_state(False)
+        elif action in ("eyes_on", "turn_on_eyes"):
+            return self.set_eye_leds(True)
+        elif action in ("eyes_off", "turn_off_eyes"):
+            return self.set_eye_leds(False)
+        elif action in ("headlight_on", "turn_on_headlight"):
+            return self.set_headlight(True)
+        elif action in ("headlight_off", "turn_off_headlight"):
+            return self.set_headlight(False)
+
+        # Check for drive motion actions
+        if action in ("forward", "back", "backward", "turn_left", "turn_right", "spin_left", "spin_right", "stop", "patrol", "spin_360", "dance", "obstacle_avoidance"):
+            cmd = f"ROVER:{action}\r\n"
+            self.send_command(cmd)
+            return {"status": "success", "action": action, "message": f"Executed Wave Rover action '{action}'"}
+        
+        return {"status": "error", "message": f"Unknown Wave Rover action '{action_name}'"}
+
+
 class ESP32PulseWindow:
     def __init__(self, audio_loop_instance):
         self.audio_loop = audio_loop_instance
@@ -1685,7 +1909,7 @@ class ESP32PulseWindow:
         import threading
 
         self.root = tk.Tk()
-        self.root.title("Hexapod Controller")
+        self.root.title("Shobots")
         self.root.geometry("960x780")
         self.root.configure(bg="#0f172a")
 
@@ -1706,7 +1930,7 @@ class ESP32PulseWindow:
         header_frame = ttk.Frame(self.root, padding=12)
         header_frame.pack(fill="x")
 
-        title_lbl = ttk.Label(header_frame, text="🤖 Hexapod Controller", style="Header.TLabel")
+        title_lbl = ttk.Label(header_frame, text="🤖 Shobots", style="Header.TLabel")
         title_lbl.pack(anchor="w")
 
         # COM Ports Selection Bar
@@ -3306,7 +3530,7 @@ class ESP32PulseWindow:
 
 
 class AudioLoop:
-    def __init__(self, video_mode=DEFAULT_MODE, camera_idx=0, mic_idx=None, speaker_idx=None, voice_name="Zephyr", esp32_port=None, esp32_birds_port=None, esp32_left_port=None, esp32_right_port=None, esp32_arm_port=None, esp32_tello_port=None, hexapod_port=None, hexapod_bt_port=None, shobots_bt_port=None, tello_ip="192.168.10.1", tello_port=8889):
+    def __init__(self, video_mode=DEFAULT_MODE, camera_idx=0, mic_idx=None, speaker_idx=None, voice_name="Zephyr", esp32_port=None, esp32_birds_port=None, esp32_left_port=None, esp32_right_port=None, esp32_arm_port=None, esp32_tello_port=None, esp32_rover_port=None, hexapod_port=None, hexapod_bt_port=None, shobots_bt_port=None, tello_ip="192.168.10.1", tello_port=8889):
         self.video_mode = video_mode
         self.camera_idx = camera_idx
         self.mic_idx = mic_idx
@@ -3317,6 +3541,7 @@ class AudioLoop:
         self.esp32_right_port = self.esp32_birds_port
         self.esp32_arm_port = esp32_arm_port
         self.esp32_tello_port = esp32_tello_port
+        self.esp32_rover_port = esp32_rover_port
         self.esp32_port = self.esp32_birds_port
         self.hexapod_port = hexapod_port or hexapod_bt_port or shobots_bt_port or "hexapod"
         self.hexapod_bt_port = self.hexapod_port
@@ -3324,11 +3549,13 @@ class AudioLoop:
         self.hexapod = HexapodController(bt_port=self.hexapod_port)
         self.shobots = self.hexapod  # Alias for backward compatibility
         self.robot_arm = RobotArmController(self)
+        self.waverover = WaveRoverController(port=self.esp32_rover_port, audio_loop=self)
         self.serial_birds = None
         self.serial_left = None
         self.serial_right = None
         self.serial_arm = None
         self.serial_tello = None
+        self.serial_rover = None
         self.serial_conn = None
         self.tello = TelloController(ip=tello_ip, port=tello_port, audio_loop=self)
         self.leviton = LevitonController()
@@ -3350,6 +3577,7 @@ class AudioLoop:
         self.speech_react_birds = True
         self.speech_react_hexapod = True
         self.speech_react_arm = True
+        self.speech_react_rover = True
 
     def connect_esp32(self, board: str, port_name: str):
         import serial
@@ -3397,6 +3625,16 @@ class AudioLoop:
                         pass
                 self.serial_tello = None
                 self.esp32_tello_port = None
+            elif board in ("rover", "waverover", "wave_rover"):
+                if self.serial_rover and self.serial_rover.is_open:
+                    try:
+                        self.serial_rover.close()
+                    except Exception:
+                        pass
+                self.serial_rover = None
+                self.esp32_rover_port = None
+                if hasattr(self, 'waverover') and self.waverover:
+                    self.waverover.connect("None (Simulation Mode)")
             board_desc = "Birds ESP32-S3 Touchscreen" if board in ("birds", "left", "right", "unified", "birdsscreen", "touchscreen", "screen", "led") else f"ESP32 {board.title()}"
             return True, f"{board_desc} set to Simulation Mode"
 
@@ -3408,6 +3646,13 @@ class AudioLoop:
                 self.shobots_bt_port = port_name
                 return ok, msg
             return True, f"Hexapod set to {port_name}"
+
+        if board in ("rover", "waverover", "wave_rover"):
+            if hasattr(self, 'waverover') and self.waverover:
+                ok, msg = self.waverover.connect(port_name)
+                self.esp32_rover_port = port_name
+                self.serial_rover = self.waverover.serial_conn
+                return ok, msg
 
         try:
             conn = serial.Serial()
@@ -3543,12 +3788,6 @@ class AudioLoop:
     async def execute_bird_routine_async(self, routine: str) -> dict:
         return await asyncio.to_thread(self.execute_bird_routine, routine)
 
-    def play_hardware_sound(self, device: str, sound: str, volume: int = None) -> dict:
-        device = device.lower().strip()
-        sound = sound.lower().strip()
-        cmd_str = f"AUDIO:{sound.upper()}\r\n"
-        vol_cmd = f"AUDIO:VOL:{int(volume)}\r\n" if volume is not None else None
-
         conn = None
         if device in ("birds", "bird", "left", "stage"):
             conn = self.serial_left or self.serial_conn
@@ -3558,6 +3797,8 @@ class AudioLoop:
             conn = getattr(self.hexapod, 'serial_hexapod', None) or self.serial_conn
         elif device in ("tello", "drone", "telloscreen"):
             conn = self.serial_tello
+        elif device in ("rover", "waverover", "wave_rover"):
+            conn = getattr(self, 'serial_rover', None) or getattr(self.waverover, 'serial_conn', None)
 
         if conn and conn.is_open:
             try:
@@ -3664,8 +3905,16 @@ class AudioLoop:
                 except Exception:
                     pass
 
+        # 4. Waveshare Wave Rover Controller (DC Mouth & Body Motion Motors, Eye LEDs)
+        if getattr(self, 'speech_react_rover', True):
+            if hasattr(self, 'waverover') and self.waverover:
+                try:
+                    self.waverover.send_command(cmd_str)
+                except Exception:
+                    pass
+
     def set_speech_reactivity(self, robot: str = "all", enabled: bool = True) -> dict:
-        """Enables or disables speech reactivity for specific robots ('birds', 'hexapod', 'arm', 'all')."""
+        """Enables or disables speech reactivity for specific robots ('birds', 'hexapod', 'arm', 'rover', 'all')."""
         robot = (robot or "all").lower().strip()
         if robot in ("birds", "bird", "parrot", "parrots"):
             self.speech_react_birds = enabled
@@ -3676,13 +3925,17 @@ class AudioLoop:
         elif robot in ("arm", "robot_arm", "robotarm"):
             self.speech_react_arm = enabled
             msg = f"Robot Arm conversational gesturing {'ENABLED' if enabled else 'DISABLED'}"
+        elif robot in ("rover", "waverover", "wave_rover"):
+            self.speech_react_rover = enabled
+            msg = f"Waveshare Wave Rover speech animatronics (DC mouth & body up/down motor) {'ENABLED' if enabled else 'DISABLED'}"
         elif robot in ("all", "both", "every", "robots"):
             self.speech_react_birds = enabled
             self.speech_react_hexapod = enabled
             self.speech_react_arm = enabled
+            self.speech_react_rover = enabled
             msg = f"All robots speech reactivity {'ENABLED' if enabled else 'DISABLED'}"
         else:
-            return {"status": "error", "message": f"Unknown robot '{robot}'. Options: 'all', 'birds', 'hexapod', 'arm'"}
+            return {"status": "error", "message": f"Unknown robot '{robot}'. Options: 'all', 'birds', 'hexapod', 'arm', 'rover'"}
 
         print(f"\n[Speech Reactivity] {msg}")
         if hasattr(self, 'gui_window') and self.gui_window and hasattr(self.gui_window, 'sync_speech_react_switches'):
@@ -3692,7 +3945,8 @@ class AudioLoop:
             "message": msg,
             "birds": self.speech_react_birds,
             "hexapod": self.speech_react_hexapod,
-            "arm": self.speech_react_arm
+            "arm": self.speech_react_arm,
+            "rover": self.speech_react_rover
         }
 
     async def set_speech_reactivity_async(self, robot: str = "all", enabled: bool = True) -> dict:
@@ -4050,6 +4304,41 @@ class AudioLoop:
                                     result = await asyncio.to_thread(self.robot_arm.set_joint_angle, channel, angle)
                                 else:
                                     result = {"status": "error", "message": "Specify action, channel+angle, or x+y+z IK coordinates"}
+
+                                function_responses.append(
+                                    types.FunctionResponse(
+                                        name=fc.name,
+                                        response=result,
+                                        id=fc.id
+                                    )
+                                )
+                            elif fc.name == "control_wave_rover":
+                                action = fc.args.get("action", "stop")
+                                speed = fc.args.get("speed")
+                                pan = fc.args.get("pan")
+                                tilt = fc.args.get("tilt")
+                                mouth = fc.args.get("mouth")
+                                body_motion = fc.args.get("body_motion")
+                                eye_leds = fc.args.get("eye_leds")
+                                headlight = fc.args.get("headlight")
+                                lcd_msg = fc.args.get("lcd_message")
+
+                                if mouth is not None:
+                                    await asyncio.to_thread(self.waverover.set_mouth_state, mouth)
+                                if body_motion is not None:
+                                    await asyncio.to_thread(self.waverover.set_body_motor_state, body_motion)
+                                if eye_leds is not None:
+                                    await asyncio.to_thread(self.waverover.set_eye_leds, eye_leds)
+                                if headlight is not None:
+                                    await asyncio.to_thread(self.waverover.set_headlight, headlight)
+                                if speed is not None:
+                                    await asyncio.to_thread(self.waverover.set_speed, speed)
+                                if pan is not None or tilt is not None:
+                                    await asyncio.to_thread(self.waverover.set_pan_tilt, pan, tilt)
+                                if lcd_msg:
+                                    await asyncio.to_thread(self.waverover.set_lcd_message, lcd_msg)
+
+                                result = await asyncio.to_thread(self.waverover.execute_action, action)
 
                                 function_responses.append(
                                     types.FunctionResponse(
@@ -4558,7 +4847,7 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
     started = False
 
     root = tk.Tk()
-    root.title("Hexapod Controller Setup & Settings")
+    root.title("Shobots Setup & Settings")
     root.geometry("480x500")
     root.resizable(False, False)
 
@@ -4645,7 +4934,7 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
         voice_combo.current(0)
 
     # 5. COM/Serial ports (Auto-Detected)
-    port_options, port_device_map, auto_birds_lbl, auto_hexapod_lbl, auto_arm_lbl, auto_tello_lbl = scan_and_autodetect_esp32_ports()
+    port_options, port_device_map, auto_birds_lbl, auto_hexapod_lbl, auto_arm_lbl, auto_tello_lbl, auto_rover_lbl = scan_and_autodetect_esp32_ports()
 
     # Birds Touchscreen COM Port Selector (Unified ESP32-S3 controlling Left & Right)
     ttk.Label(main_frame, text="Birds ESP32-S3 Touchscreen (esp32_Birds.ino):").grid(row=6, column=0, sticky=tk.W, pady=6)
@@ -4672,7 +4961,7 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
     def on_scan_bt_hexapod():
         scan_bt_btn.configure(state="disabled", text="Scanning...")
         def run_bt_scan():
-            p_opts, p_map, _, a_hex, _, _ = scan_and_autodetect_esp32_ports()
+            p_opts, p_map, _, a_hex, _, _, _ = scan_and_autodetect_esp32_ports()
             opts, d_map, auto_lbl = scan_bluetooth_ports()
             comb_opts = list(p_opts)
             for o in opts:
@@ -4709,20 +4998,26 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
     tello_port_combo.grid(row=9, column=1, sticky=tk.W, pady=6)
     tello_port_combo.set(auto_tello_lbl)
 
+    # Waveshare Wave Rover COM Port Selector
+    ttk.Label(main_frame, text="Wave Rover COM (esp32_waverover.ino):").grid(row=10, column=0, sticky=tk.W, pady=6)
+    rover_port_combo = ttk.Combobox(main_frame, values=port_options, state="readonly", width=42)
+    rover_port_combo.grid(row=10, column=1, sticky=tk.W, pady=6)
+    rover_port_combo.set(auto_rover_lbl)
+
     # Tello Drone IP Entry
-    ttk.Label(main_frame, text="Tello Drone IP:").grid(row=10, column=0, sticky=tk.W, pady=8)
+    ttk.Label(main_frame, text="Tello Drone IP:").grid(row=11, column=0, sticky=tk.W, pady=8)
     
     tello_ip_frame = ttk.Frame(main_frame)
-    tello_ip_frame.grid(row=10, column=1, sticky=tk.W, pady=8)
+    tello_ip_frame.grid(row=11, column=1, sticky=tk.W, pady=8)
     
     tello_ip_combo = ttk.Combobox(tello_ip_frame, width=28, state="normal")
     tello_ip_combo.pack(side=tk.LEFT, padx=(0, 5))
     tello_ip_combo.set("192.168.10.1")
     
     # Tello Drone Port Entry
-    ttk.Label(main_frame, text="Tello Drone Port:").grid(row=11, column=0, sticky=tk.W, pady=8)
+    ttk.Label(main_frame, text="Tello Drone Port:").grid(row=12, column=0, sticky=tk.W, pady=8)
     tello_port_entry = ttk.Entry(main_frame, width=45)
-    tello_port_entry.grid(row=11, column=1, sticky=tk.W, pady=8)
+    tello_port_entry.grid(row=12, column=1, sticky=tk.W, pady=8)
     tello_port_entry.insert(0, "8889")
     
     def on_scan_network():
@@ -4890,7 +5185,7 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
 
     # Buttons
     button_frame = ttk.Frame(main_frame, padding=(0, 25, 0, 0))
-    button_frame.grid(row=11, column=0, columnspan=2, sticky=tk.E)
+    button_frame.grid(row=13, column=0, columnspan=2, sticky=tk.E)
 
     def on_start():
         nonlocal started
@@ -4942,6 +5237,9 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
         sel_tello_lbl = tello_port_combo.get()
         result["esp32_tello_port"] = port_device_map.get(sel_tello_lbl)
 
+        sel_rover_lbl = rover_port_combo.get()
+        result["esp32_rover_port"] = port_device_map.get(sel_rover_lbl)
+
         sel_bt_lbl = hexapod_bt_combo.get()
         dev_hex = port_device_map.get(sel_bt_lbl, bt_dev_map.get(sel_bt_lbl, sel_bt_lbl))
         result["hexapod_bt_port"] = dev_hex
@@ -4985,7 +5283,7 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
     height = root.winfo_height()
     x = (root.winfo_screenwidth() // 2) - (width // 2)
     y = (root.winfo_screenheight() // 2) - (height // 2)
-    root.geometry(f'520x560+{x}+{y}')
+    root.geometry(f'520x600+{x}+{y}')
 
     # Automatically start network scan at startup
     root.after(100, on_scan_network)
@@ -5040,6 +5338,7 @@ if __name__ == "__main__":
         esp32_right_port = esp32_birds_port
         esp32_arm_port = None
         esp32_tello_port = None
+        esp32_rover_port = None
         hexapod_port = choose_hexapod_bt_port()
         hexapod_bt_port = hexapod_port
         tello_port = choose_tello_port()
@@ -5055,6 +5354,7 @@ if __name__ == "__main__":
         esp32_right_port = esp32_birds_port
         esp32_arm_port = settings.get("esp32_arm_port")
         esp32_tello_port = settings.get("esp32_tello_port")
+        esp32_rover_port = settings.get("esp32_rover_port")
         hexapod_port = settings.get("hexapod_port", settings.get("hexapod_bt_port", settings.get("shobots_bt_port", "hexapod")))
         hexapod_bt_port = hexapod_port
         tello_ip = settings.get("tello_ip", "192.168.10.1")
@@ -5072,6 +5372,7 @@ if __name__ == "__main__":
         esp32_right_port=esp32_right_port,
         esp32_arm_port=esp32_arm_port,
         esp32_tello_port=esp32_tello_port,
+        esp32_rover_port=esp32_rover_port,
         hexapod_port=hexapod_port,
         hexapod_bt_port=hexapod_bt_port,
         tello_ip=tello_ip,

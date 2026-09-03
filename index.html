@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hexapod Controller - Multimodal AI Robotics Dashboard</title>
+  <title>Shobots - Multimodal AI Robotics Dashboard</title>
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -506,6 +506,62 @@
           <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
             <button type="button" id="btn-test-speech-pulse" class="text-btn btn-small" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; cursor: pointer;">
               <i class="fa-solid fa-bolt-lightning"></i> ⚡ Test Speech Animatronics (1.5s)
+            </button>
+          </div>
+        </div>
+
+        <!-- 🚗 Waveshare Wave Rover & L298N Speech Animatronics Section -->
+        <div class="rover-control-section" style="margin-top: 1rem; background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 41, 59, 0.7) 100%); border: 1px solid rgba(34, 197, 94, 0.35); border-radius: 12px; padding: 1rem; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);">
+          <div class="section-title-bar" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-truck-monster" style="color: #4ade80; font-size: 1.1rem;"></i>
+              <div>
+                <h3 style="font-size: 0.95rem; font-weight: 700; color: #f8fafc; margin: 0;">Waveshare Wave Rover Mobile Platform & Speech Animatronics</h3>
+                <span style="font-size: 0.75rem; color: #94a3b8;">4WD Drive, L298N DC Mouth Motor, Body Up/Down Motor & Eye LEDs</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- L298N & Animatronic Controls Grid -->
+          <div class="rover-animatronic-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem; margin-bottom: 0.85rem;">
+            <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:MOUTH:1" style="background: rgba(34, 197, 94, 0.2); border: 1px solid #22c55e; color: #4ade80;">
+              <i class="fa-solid fa-comments"></i> Mouth Open (ON)
+            </button>
+            <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:MOUTH:0" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #f87171;">
+              <i class="fa-solid fa-comment-slash"></i> Mouth Close (OFF)
+            </button>
+            <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:BODY:1" style="background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #c084fc;">
+              <i class="fa-solid fa-arrows-up-down"></i> Body Up/Down (ON)
+            </button>
+            <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:BODY:0" style="background: rgba(100, 116, 139, 0.2); border: 1px solid #64748b; color: #cbd5e1;">
+              <i class="fa-solid fa-stop"></i> Body Motion (OFF)
+            </button>
+            <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:EYES:1" style="background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #7dd3fc;">
+              <i class="fa-solid fa-eye"></i> Eye LEDs (ON)
+            </button>
+            <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:EYES:0" style="background: rgba(100, 116, 139, 0.2); border: 1px solid #64748b; color: #cbd5e1;">
+              <i class="fa-solid fa-eye-slash"></i> Eye LEDs (OFF)
+            </button>
+          </div>
+
+          <!-- 4WD Movement D-Pad Controls -->
+          <div class="rover-dpad-section" style="display: flex; flex-direction: column; align-items: center; gap: 0.4rem; margin-top: 0.5rem;">
+            <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:forward" style="width: 120px; background: rgba(56, 189, 248, 0.25); border: 1px solid #38bdf8; color: #38bdf8;">
+              <i class="fa-solid fa-arrow-up"></i> Forward
+            </button>
+            <div style="display: flex; gap: 0.5rem;">
+              <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:turn_left" style="width: 110px; background: rgba(56, 189, 248, 0.25); border: 1px solid #38bdf8; color: #38bdf8;">
+                <i class="fa-solid fa-arrow-left"></i> Left
+              </button>
+              <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:stop" style="width: 90px; background: rgba(239, 68, 68, 0.3); border: 1px solid #ef4444; color: #f87171; font-weight: bold;">
+                <i class="fa-solid fa-hand"></i> STOP
+              </button>
+              <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:turn_right" style="width: 110px; background: rgba(56, 189, 248, 0.25); border: 1px solid #38bdf8; color: #38bdf8;">
+                <i class="fa-solid fa-arrow-right"></i> Right
+              </button>
+            </div>
+            <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:back" style="width: 120px; background: rgba(56, 189, 248, 0.25); border: 1px solid #38bdf8; color: #38bdf8;">
+              <i class="fa-solid fa-arrow-down"></i> Reverse
             </button>
           </div>
         </div>

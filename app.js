@@ -665,7 +665,7 @@ async function connectSession() {
                 },
                 {
                   name: "control_hexapod",
-                  description: "Controls the 6-leg Hexapod robot driven by the Waveshare ESP32-S3-Touch-LCD-7B controller (over Bluetooth 'hexapod-touch-7b' or USB serial). Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message'. Can also adjust leg joints or display custom text on the onboard 1024x600 HD Touch LCD.",
+                  description: "Controls the 6-leg Hexapod robot driven by the Waveshare ESP32-S3-Touch-LCD-7C controller (over Bluetooth 'hexapod-touch-7c' or USB serial). Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message'. Can also adjust leg joints or display custom text on the onboard 1024x600 HD Touch LCD.",
                   parameters: {
                     type: "OBJECT",
                     properties: {
@@ -687,7 +687,7 @@ async function connectSession() {
                       },
                       lcd_message: {
                         type: "STRING",
-                        description: "Custom text or status message to display on the robot's onboard Waveshare 7B Touch LCD screen."
+                        description: "Custom text or status message to display on the robot's onboard Waveshare 7C Touch LCD screen."
                       }
                     },
                     required: ["action"]
@@ -695,7 +695,7 @@ async function connectSession() {
                 },
                 {
                   name: "control_robot_arm",
-                  description: "Controls the 6-DOF Robot Arm powered by the Waveshare ESP32-S3-Touch-LCD-7B (over USB serial or Bluetooth). Supports postures ('home', 'rest', 'reach', 'bow'), gestures ('yes', 'no', 'wave', 'high_five', 'dance'), gripper claw control ('open_gripper', 'close_gripper'), speed changes, or setting specific joint angles (0: Base/Waist, 1: Shoulder, 2: Elbow, 3: Wrist Pitch, 4: Wrist Roll, 5: Claw).",
+                  description: "Controls the 6-DOF Robot Arm powered by the Waveshare ESP32-S3-Touch-LCD-7C (over USB serial or Bluetooth). Supports postures ('home', 'rest', 'reach', 'bow'), gestures ('yes', 'no', 'wave', 'high_five', 'dance'), gripper claw control ('open_gripper', 'close_gripper'), speed changes, or setting specific joint angles (0: Base/Waist, 1: Shoulder, 2: Elbow, 3: Wrist Pitch, 4: Wrist Roll, 5: Claw).",
                   parameters: {
                     type: "OBJECT",
                     properties: {
@@ -714,6 +714,52 @@ async function connectSession() {
                       lcd_message: {
                         type: "STRING",
                         description: "Custom status message to display on the 1024x600 HD Touchscreen."
+                      }
+                    },
+                    required: ["action"]
+                  }
+                },
+                {
+                  name: "control_wave_rover",
+                  description: "Controls the Waveshare Wave Rover mobile platform driven by the ESP32-S3 7.0\" 1024x600 HD Touchscreen controller (over USB serial). Controls 4WD mobile movement ('forward', 'back', 'turn_left', 'turn_right', 'spin_left', 'spin_right', 'stop'), L298N motor driver (DC mouth open/close, body motion up/down motor), eye LEDs, headlights, speed (0-100), pan-tilt camera servos (0-180), and onboard LCD text messages.",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      action: {
+                        type: "STRING",
+                        description: "Motion action: 'forward', 'back', 'turn_left', 'turn_right', 'spin_left', 'spin_right', 'stop', 'mouth_open', 'mouth_close', 'body_up', 'body_down', 'eyes_on', 'eyes_off', 'headlight_on', 'headlight_off'."
+                      },
+                      speed: {
+                        type: "INTEGER",
+                        description: "Rover movement speed percentage (0 to 100)."
+                      },
+                      pan: {
+                        type: "INTEGER",
+                        description: "Camera pan servo angle (0 to 180 degrees)."
+                      },
+                      tilt: {
+                        type: "INTEGER",
+                        description: "Camera tilt servo angle (0 to 180 degrees)."
+                      },
+                      mouth: {
+                        type: "BOOLEAN",
+                        description: "True to power ON L298N DC mouth motor (open mouth), False to power OFF (close mouth)."
+                      },
+                      body_motion: {
+                        type: "BOOLEAN",
+                        description: "True to power ON L298N body up/down motor, False to power OFF (stop)."
+                      },
+                      eye_leds: {
+                        type: "BOOLEAN",
+                        description: "True to turn Eye LEDs ON, False to turn OFF."
+                      },
+                      headlight: {
+                        type: "BOOLEAN",
+                        description: "True to turn headlights ON, False to turn OFF."
+                      },
+                      lcd_message: {
+                        type: "STRING",
+                        description: "Custom text message to display on the 7.0\" 1024x600 HD LCD screen."
                       }
                     },
                     required: ["action"]
@@ -775,17 +821,17 @@ async function connectSession() {
                 },
                 {
                   name: "play_hardware_sound",
-                  description: "Plays procedural audio sound effects on the MAX98357A I2S Audio Amplifier attached to any of the 4 ESP32-S3 Touchscreen hardware boards: 'birds' (chirp, squawk, trill, melody, symphony, beep), 'hexapod' (step, startup, shutdown, alert, dance, r2d2, servo, click), 'arm' (claw_grab, claw_release, servo, chime, error, fanfare, beep), or 'tello'/'drone' (takeoff, land, flip, radar, alarm, siren, connect).",
+                  description: "Plays procedural audio sound effects on the MAX98357A I2S Audio Amplifier attached to any of the 5 ESP32 hardware platforms: 'birds', 'hexapod', 'arm', 'rover', or 'tello'/'drone'.",
                   parameters: {
                     type: "OBJECT",
                     properties: {
                       device: {
                         type: "STRING",
-                        description: "Target hardware device: 'birds', 'hexapod', 'arm', 'drone' (or 'tello')."
+                        description: "Target hardware device: 'birds', 'hexapod', 'arm', 'rover', 'drone' (or 'tello')."
                       },
                       sound: {
                         type: "STRING",
-                        description: "Sound name to play (e.g. 'chirp', 'squawk', 'step', 'startup', 'claw_grab', 'chime', 'takeoff', 'land', 'flip', 'radar', 'fanfare', etc.)."
+                        description: "Sound name to play (e.g. 'chirp', 'squawk', 'step', 'startup', 'claw_grab', 'rover_engine', 'horn', 'takeoff', 'land', 'flip', etc.)."
                       },
                       volume: {
                         type: "INTEGER",
@@ -902,12 +948,12 @@ async function connectSession() {
               if (jointName === 'femur') ch = 1;
               else if (jointName === 'tibia') ch = 2;
               writeSerialCommand(`HEX:SERVO:${driver}:${ch}:${angle}\n`);
-              result = { status: "success", leg: legName, joint: jointName, angle: angle, device: "Waveshare-7B-Hexapod" };
-              appendSystemMessage(`[Waveshare 7B Hexapod] Set Leg ${legName} ${jointName} to ${angle}°`);
+              result = { status: "success", leg: legName, joint: jointName, angle: angle, device: "Waveshare-7C-Hexapod" };
+              appendSystemMessage(`[Waveshare 7C Hexapod] Set Leg ${legName} ${jointName} to ${angle}°`);
             } else {
               writeSerialCommand(`HEX:${action}\n`);
-              result = { status: "success", action: action, device: "Waveshare-7B-Hexapod" };
-              appendSystemMessage(`[Waveshare 7B Hexapod] Executed action: ${action}`);
+              result = { status: "success", action: action, device: "Waveshare-7C-Hexapod" };
+              appendSystemMessage(`[Waveshare 7C Hexapod] Executed action: ${action}`);
             }
           } else if (fc.name === "control_robot_arm") {
             const action = fc.args.action || "home";
@@ -921,16 +967,38 @@ async function connectSession() {
 
             if (channel !== undefined && angle !== undefined) {
               writeSerialCommand(`SERVO:${channel}:${angle}\n`);
-              result = { status: "success", channel: channel, angle: angle, device: "Waveshare-7B-Arm" };
-              appendSystemMessage(`[Waveshare 7B Robot Arm] Set Joint ${channel} to ${angle}°`);
+              result = { status: "success", channel: channel, angle: angle, device: "Waveshare-7C-Arm" };
+              appendSystemMessage(`[Waveshare 7C Robot Arm] Set Joint ${channel} to ${angle}°`);
             } else {
               if (action === "open_gripper") writeSerialCommand(`SERVO:5:20\n`);
               else if (action === "close_gripper") writeSerialCommand(`SERVO:5:100\n`);
               else if (action === "home") writeSerialCommand(`ARM:SPEED:250\nSERVO:0:90\nSERVO:1:90\nSERVO:2:90\nSERVO:3:90\nSERVO:4:90\nSERVO:5:40\n`);
               else writeSerialCommand(`ARM:${action}\n`);
-              result = { status: "success", action: action, device: "Waveshare-7B-Arm" };
-              appendSystemMessage(`[Waveshare 7B Robot Arm] Executed action: ${action}`);
+              result = { status: "success", action: action, device: "Waveshare-7C-Arm" };
+              appendSystemMessage(`[Waveshare 7C Robot Arm] Executed action: ${action}`);
             }
+          } else if (fc.name === "control_wave_rover") {
+            const action = fc.args.action || "stop";
+            const speed = fc.args.speed;
+            const pan = fc.args.pan;
+            const tilt = fc.args.tilt;
+            const mouth = fc.args.mouth;
+            const bodyMotion = fc.args.body_motion;
+            const eyeLeds = fc.args.eye_leds;
+            const headlight = fc.args.headlight;
+            const lcdMsg = fc.args.lcd_message;
+
+            if (mouth !== undefined) writeSerialCommand(`ROVER:MOUTH:${mouth ? 1 : 0}\n`);
+            if (bodyMotion !== undefined) writeSerialCommand(`ROVER:BODY:${bodyMotion ? 1 : 0}\n`);
+            if (eyeLeds !== undefined) writeSerialCommand(`ROVER:EYES:${eyeLeds ? 1 : 0}\n`);
+            if (headlight !== undefined) writeSerialCommand(`ROVER:LED:${headlight ? 1 : 0}\n`);
+            if (speed !== undefined) writeSerialCommand(`ROVER:SPEED:${speed}\n`);
+            if (pan !== undefined || tilt !== undefined) writeSerialCommand(`ROVER:PANTILT:${pan !== undefined ? pan : 90}:${tilt !== undefined ? tilt : 90}\n`);
+            if (lcdMsg) writeSerialCommand(`ROVER:LCD:MSG:${lcdMsg}\n`);
+            writeSerialCommand(`ROVER:${action}\n`);
+
+            result = { status: "success", action: action, device: "Waveshare-Wave-Rover" };
+            appendSystemMessage(`[Waveshare Wave Rover] Executed action: ${action}`);
           } else if (fc.name === "play_hardware_sound") {
             const device = (fc.args.device || "birds").toLowerCase();
             const sound = (fc.args.sound || "chirp").toLowerCase();
@@ -1910,5 +1978,17 @@ document.addEventListener('DOMContentLoaded', () => {
       triggerTestSpeechPulse(1500);
     });
   }
+
+  // Waveshare Wave Rover Action Buttons Handler
+  const roverBtns = document.querySelectorAll('.rover-action-btn');
+  roverBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cmd = btn.dataset.cmd;
+      if (cmd) {
+        writeSerialCommand(`${cmd}\n`);
+        appendSystemMessage(`[Waveshare Wave Rover] Sent command: ${cmd}`);
+      }
+    });
+  });
 });
 

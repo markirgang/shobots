@@ -121,3 +121,8 @@ Thumbs.db
 
 # Local Netlify folder
 .netlify
+
+# PlatformIO build folder
+.pio/
+**/.pio/
+

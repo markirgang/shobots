@@ -1,13 +1,13 @@
 /*
-  Hexapod Controller - esp32_Birds.ino (Waveshare 7-Inch Capacitive Touch LCD ESP32 Firmware)
+  Shobots - esp32_Birds.ino (Waveshare 7-Inch Capacitive Touch LCD ESP32 Firmware)
   =============================================================================
   Folder: esp32_Birds/
   Sketch: esp32_Birds.ino
-  Hardware: Waveshare ESP32-S3-Touch-LCD-7 (7.0" 800x480 Capacitive Touchscreen, GT911)
+  Hardware: Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 Capacitive Touchscreen, GT911)
   Substituted for: Dual ESP32 DevKits (Left & Right Boards)
 
   Features:
-    - 7.0-inch 800x480 Widescreen Capacitive Touchscreen Dashboard
+    - 7.0-inch 1024x600 Widescreen Capacitive Touchscreen Dashboard
     - GT911 High-Precision 5-Point Capacitive Multi-Touch Controller
     - MCP23017 16-Bit I2C I/O Expander Board for On/Off Bird Outputs (Lights, Solenoids, Chirps, Motors)
         * Primary MCP23017 (I2C Address: 0x20): Left & Right Bird Outputs (Pins 0-15)
@@ -30,7 +30,7 @@
         * ALL HOME: Returns all 32 servos to default 90° and resets all outputs
     - Multi-Channel Host Control: USB CDC Serial, Bluetooth, and Direct Capacitive Touchscreen
 
-  I2C Bus Wiring (Waveshare ESP32-S3-Touch-LCD-7):
+  I2C Bus Wiring (Waveshare ESP32-S3-Touch-LCD-7C):
     - SDA    : GPIO 8  (PH2.0 4-Pin I2C Header)
     - SCL    : GPIO 9  (PH2.0 4-Pin I2C Header)
     - TP_INT : GPIO 4  (GT911 Interrupt)
@@ -51,12 +51,15 @@
 #include <BluetoothSerial.h>
 #define HAS_BT_CLASSIC 1
 BluetoothSerial SerialBT;
-#else
+#endif
+
+#ifndef HAS_BT_CLASSIC
 #define HAS_BT_CLASSIC 0
 #endif
 
 // =============================================================================
-// MAX98357A I2S Mono Audio Amplifier Pinout & Configuration
+// Waveshare ESP32-S3-Touch-LCD-7C Onboard I2S Audio Hardware Configuration
+// (Built-in I2S Audio Codec / Class-D Power Amplifier & Onboard Speaker Header)
 // =============================================================================
 #ifndef I2S_BCLK_PIN
 #define I2S_BCLK_PIN          19   // I2S Bit Clock (BCLK / BCK)
@@ -65,7 +68,7 @@ BluetoothSerial SerialBT;
 #define I2S_LRC_PIN           20   // I2S Word Select / Left-Right Clock (LRC / WS)
 #endif
 #ifndef I2S_DOUT_PIN
-#define I2S_DOUT_PIN          21   // I2S Serial Data Out (DIN on MAX98357A)
+#define I2S_DOUT_PIN          21   // I2S Serial Data Out (DIN)
 #endif
 #define I2S_PORT              I2S_NUM_0
 #define I2S_SAMPLE_RATE       22050
@@ -85,13 +88,12 @@ struct TouchButton {
 // =============================================================================
 // Hardware Configuration & Board Profiles
 // =============================================================================
-// Select ONE board profile below (Default: Waveshare ESP32-S3-Touch-LCD-7B):
-#define BOARD_ESP32_TOUCH_LCD_7B   1  // Waveshare ESP32-S3-Touch-LCD-7B (7.0" 1024x600 HD GT911 + CH422G IO)
-//#define BOARD_ESP32_TOUCH_LCD_7A 1  // Waveshare ESP32-S3-Touch-LCD-7 (7.0" 800x480 Standard GT911)
+// Select ONE board profile below (Waveshare ESP32-S3-Touch-LCD-7C):
+#define BOARD_ESP32_TOUCH_LCD_7C   1  // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 HD GT911 + CH422G IO + Audio Codec)
 
-#if defined(BOARD_ESP32_TOUCH_LCD_7B)
-  #define SCREEN_WIDTH         1024
-  #define SCREEN_HEIGHT         600
+#if defined(BOARD_ESP32_TOUCH_LCD_7C)
+  #define SCREEN_WIDTH          800
+  #define SCREEN_HEIGHT         480
   #define HAS_CH422G_IO           1   // Onboard IO Expander for Backlight & Power Control
 #else
   #define SCREEN_WIDTH          800
@@ -179,7 +181,7 @@ bool isServoMoving = false;
 String currentRoutine = "idle";
 unsigned long routineStepTime = 0;
 int routineStepIndex = 0;
-String statusMessage = "Waveshare 7.0\" Touch-LCD Online";
+String statusMessage = "Waveshare 7.0\" Touch-LCD 7C Online";
 
 // Animation State Variables
 unsigned long lastAnimUpdate = 0;
@@ -229,9 +231,9 @@ void initI2SAudio() {
     i2s_set_pin(I2S_PORT, &pin_config);
     i2s_zero_dma_buffer(I2S_PORT);
     i2sAudioReady = true;
-    Serial.println("[MAX98357A] I2S Mono Audio Amplifier Initialized Successfully!");
+    Serial.println("[Waveshare 7C Audio] Onboard I2S Audio Hardware Initialized Successfully!");
   } else {
-    Serial.print("[MAX98357A] I2S Driver Install Failed! Error: ");
+    Serial.print("[Waveshare 7C Audio] I2S Driver Install Failed! Error: ");
     Serial.println(err);
   }
 }
@@ -962,9 +964,9 @@ void updateSpeechMotionEngine() {
 }
 
 // =============================================================================
-// Waveshare ESP32-S3-Touch-LCD-7B Onboard IO Expander (CH422G) Driver
+// Waveshare ESP32-S3-Touch-LCD-7C Onboard IO Expander (CH422G) Driver
 // =============================================================================
-void initIOExpander7B() {
+void initIOExpander7C() {
 #if HAS_CH422G_IO
   // Probes CH422G IO expander addresses (0x24 / 0x38)
   // EXIO1: TP_RST (1), EXIO2: Backlight DISP (1), EXIO4: SD_CS (1), EXIO5: USB_SEL (0), EXIO6: LCD_VDD_EN (1)
@@ -1047,7 +1049,7 @@ bool readTouch(int &x, int &y) {
 // =============================================================================
 // On-Screen Touch Dashboard Layout & Action Dispatcher
 // =============================================================================
-#if defined(BOARD_ESP32_TOUCH_LCD_7B)
+#if defined(BOARD_ESP32_TOUCH_LCD_7C)
 // 1024x600 High-Definition Touch Dashboard
 const TouchButton DASHBOARD_BTNS[] = {
   // Left Bird Output Toggles (Columns 1 & 2, Left Side: X=25, 135)
@@ -1601,7 +1603,7 @@ void setup() {
   }
 
   // Initialize Peripherals
-  initIOExpander7B(); // Enable CH422G Backlight, Power & Touch Reset
+  initIOExpander7C(); // Enable CH422G Backlight, Power & Touch Reset
   initI2SAudio();
   initMCP23017();
   initPCA9685Drivers();
@@ -1618,7 +1620,7 @@ void setup() {
   playBirdChirpSound();
 
   Serial.println("==========================================================");
-  Serial.println("🦜 Waveshare ESP32-S3-Touch-LCD-7B Birds & LED Controller");
+  Serial.println("🦜 Waveshare ESP32-S3-Touch-LCD-7C Birds & LED Controller");
   Serial.println("Display: 1024x600 HD Widescreen RGB | Touch: GT911 Capacitive");
   Serial.println("IO Expander: CH422G (Backlight EXIO2, Power EXIO6, Touch RST EXIO1)");
   Serial.println("==========================================================");

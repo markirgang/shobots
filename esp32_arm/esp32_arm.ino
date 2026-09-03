@@ -1,7 +1,7 @@
 /*
-  Hexapod Controller - ESP-32-Touch-LCD 7B 6-DOF Robot Arm Firmware
+  Shobots - ESP-32-Touch-LCD 7C 6-DOF Robot Arm Firmware
   =============================================================================
-  Hardware: Waveshare ESP32-S3-Touch-LCD-7B (7.0" 1024x600 HD Capacitive Touchscreen, GT911 Controller)
+  Hardware: Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 HD Capacitive Touchscreen, GT911 Controller)
   Substituted for: ESP-32 DevKit
 
   Features:
@@ -20,7 +20,7 @@
     - PCA9685 16-Channel I2C Servo Driver (Address 0x40 on GPIO 8 SDA / GPIO 9 SCL)
     - Multi-Channel Control: USB CDC Serial, Bluetooth / BLE, and Direct Widescreen Touch
 
-  Pinout (Waveshare ESP32-S3-Touch-LCD-7B):
+  Pinout (Waveshare ESP32-S3-Touch-LCD-7C):
     - I2C Bus (Shared for GT911 Touch, IO Expander & PCA9685 Servo Driver):
         * SDA : GPIO 8 (PH2.0 4-Pin I2C Header)
         * SCL : GPIO 9 (PH2.0 4-Pin I2C Header)
@@ -47,12 +47,15 @@
 #include <BluetoothSerial.h>
 #define HAS_BT_CLASSIC 1
 BluetoothSerial SerialBT;
-#else
+#endif
+
+#ifndef HAS_BT_CLASSIC
 #define HAS_BT_CLASSIC 0
 #endif
 
 // =============================================================================
-// MAX98357A I2S Mono Audio Amplifier Pinout & Configuration
+// Waveshare ESP32-S3-Touch-LCD-7C Onboard I2S Audio Hardware Configuration
+// (Built-in I2S Audio Codec / Class-D Power Amplifier & Onboard Speaker Header)
 // =============================================================================
 #ifndef I2S_BCLK_PIN
 #define I2S_BCLK_PIN          19   // I2S Bit Clock (BCLK / BCK)
@@ -61,7 +64,7 @@ BluetoothSerial SerialBT;
 #define I2S_LRC_PIN           20   // I2S Word Select / Left-Right Clock (LRC / WS)
 #endif
 #ifndef I2S_DOUT_PIN
-#define I2S_DOUT_PIN          21   // I2S Serial Data Out (DIN on MAX98357A)
+#define I2S_DOUT_PIN          21   // I2S Serial Data Out (DIN)
 #endif
 #define I2S_PORT              I2S_NUM_0
 #define I2S_SAMPLE_RATE       22050
@@ -70,17 +73,16 @@ BluetoothSerial SerialBT;
 // =============================================================================
 // Hardware Profile Selection
 // =============================================================================
-// Select ONE board profile below (Default: Waveshare ESP32-S3-Touch-LCD-7B):
-#define BOARD_ESP32_TOUCH_LCD_7B 1 // Waveshare ESP32-S3-Touch-LCD-7B (7.0" 1024x600 HD GT911 + CH422G IO)
-//#define BOARD_ESP32_TOUCH_LCD_7A 1 // Waveshare ESP32-S3-Touch-LCD-7 (7.0" 800x480 Standard GT911)
+// Select ONE board profile below (Waveshare ESP32-S3-Touch-LCD-7C):
+#define BOARD_ESP32_TOUCH_LCD_7C 1 // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 HD GT911 + CH422G IO + Audio Codec)
 
-#if defined(BOARD_ESP32_TOUCH_LCD_7B)
+#if defined(BOARD_ESP32_TOUCH_LCD_7C)
   #define I2C_SDA_PIN      8
   #define I2C_SCL_PIN      9
   #define TP_INT_PIN       4
   #define TP_RST_PIN      -1
-  #define SCREEN_WIDTH  1024
-  #define SCREEN_HEIGHT  600
+  #define SCREEN_WIDTH   800
+  #define SCREEN_HEIGHT  480
   #define TOUCH_I2C_ADDR 0x5D // GT911 Capacitive Touch Controller
   #define HAS_CH422G_IO    1  // Onboard IO Expander for Backlight & Power Control
 #else
@@ -138,7 +140,7 @@ unsigned long routineStepTime = 0;
 int routineStepIndex = 0;
 
 // LCD Telemetry & Mascot Animation Variables
-String armStatusMessage = "Waveshare 7B (1024x600) 6-DOF Arm Online";
+String armStatusMessage = "Waveshare 7C (1024x600) 6-DOF Arm Online";
 String mascotExpression = "idle"; // idle, happy, shake, star, wink, nod
 unsigned long lastTelemetryUpdate = 0;
 unsigned long lastMascotBlink = 0;
@@ -191,9 +193,9 @@ void initI2SAudio() {
     i2s_set_pin(I2S_PORT, &pin_config);
     i2s_zero_dma_buffer(I2S_PORT);
     i2sAudioReady = true;
-    Serial.println("[MAX98357A] I2S Mono Audio Amplifier Initialized Successfully!");
+    Serial.println("[Waveshare 7C Audio] Onboard I2S Audio Hardware Initialized Successfully!");
   } else {
-    Serial.print("[MAX98357A] I2S Driver Install Failed! Error: ");
+    Serial.print("[Waveshare 7C Audio] I2S Driver Install Failed! Error: ");
     Serial.println(err);
   }
 }
@@ -724,9 +726,9 @@ bool readTouch(int &x, int &y) {
 }
 
 // =============================================================================
-// Waveshare ESP32-S3-Touch-LCD-7B Onboard IO Expander (CH422G) Driver
+// Waveshare ESP32-S3-Touch-LCD-7C Onboard IO Expander (CH422G) Driver
 // =============================================================================
-void initIOExpander7B() {
+void initIOExpander7C() {
 #if HAS_CH422G_IO
   // Probes CH422G IO expander addresses (0x24 / 0x38)
   // EXIO1: TP_RST (1), EXIO2: Backlight DISP (1), EXIO4: SD_CS (1), EXIO5: USB_SEL (0), EXIO6: LCD_VDD_EN (1)
@@ -754,33 +756,9 @@ struct TouchButton {
   uint16_t color;
 };
 
-#if defined(BOARD_ESP32_TOUCH_LCD_7B)
+#if defined(BOARD_ESP32_TOUCH_LCD_7C)
 const TouchButton TOUCH_BTNS[] = {
-  // Column 1: Postures & Routines (Left Column: X=30, W=175)
-  {"HOME",         30, 105, 175, 65, "home",          0x0284},
-  {"REST",         30, 185, 175, 65, "rest",          0xD5A0},
-  {"REACH",        30, 265, 175, 65, "reach",         0x7BEF},
-  {"HIGH FIVE",    30, 345, 175, 65, "high_five",     0xFD20},
-  {"BOW",          30, 425, 175, 65, "bow",           0x07E0},
-
-  // Column 2: Gestures & Routines (Mid-Left Column: X=225, W=175)
-  {"YES / NOD",   225, 105, 175, 65, "yes",           0x2595},
-  {"NO / SHAKE",  225, 185, 175, 65, "no",            0xFD20},
-  {"WAVE",        225, 265, 175, 65, "wave",          0x04FF},
-  {"DANCE",       225, 345, 175, 65, "dance",         0xF81F},
-  {"STOP",        225, 425, 175, 65, "stop",          0xF800},
-
-  // Column 3: Gripper Controls & Speech Reactivity (Right Column: X=820, W=175)
-  {"OPEN CLAW",   820, 105, 175, 65, "open_gripper",  0x10B9},
-  {"CLOSE CLAW",  820, 185, 175, 65, "close_gripper", 0xEF44},
-  {"SPEED -",     820, 265,  82, 65, "speed_down",    0x3341},
-  {"SPEED +",     913, 265,  82, 65, "speed_up",      0x3341},
-  {"SPEECH: ON",  820, 345, 175, 65, "toggle_speech", 0x05E0},
-  {"TALK TEST",   820, 425, 175, 65, "test_speech",   0x38BD},
-};
-#else
-const TouchButton TOUCH_BTNS[] = {
-  // 800x480 Standard Fallback
+  // 800x480 Widescreen Dashboard Layout (Waveshare ESP32-S3-Touch-LCD-7C)
   {"HOME",         25,  95, 140, 55, "home",          0x0284},
   {"REST",         25, 160, 140, 55, "rest",          0xD5A0},
   {"REACH",        25, 225, 140, 55, "reach",         0x7BEF},
@@ -1170,7 +1148,7 @@ void setup() {
   while (!Serial && millis() < 2000);
 
   Serial.println("==========================================================");
-  Serial.println("🦾 Waveshare ESP32-S3-Touch-LCD-7B 6-DOF Robot Arm");
+  Serial.println("🦾 Waveshare ESP32-S3-Touch-LCD-7C 6-DOF Robot Arm");
   Serial.println("Display: 1024x600 HD Widescreen RGB | Touch: GT911 Capacitive");
   Serial.println("IO Expander: CH422G (Backlight DISP & Power Control)");
   Serial.println("Telemetry: Live 6-Joint Angles, 3D Cartesian IK & FK Engine");
@@ -1185,8 +1163,8 @@ void setup() {
   // Initialize MAX98357A I2S Audio Amplifier (BCLK=19, LRC=20, DIN=21)
   initI2SAudio();
 
-  // Initialize Waveshare 7B Onboard IO Expander (CH422G for Backlight & Power)
-  initIOExpander7B();
+  // Initialize Waveshare 7C Onboard IO Expander (CH422G for Backlight & Power)
+  initIOExpander7C();
 
   // Initialize PCA9685 Servo Driver
   initPCA9685();

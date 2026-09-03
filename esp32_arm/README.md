@@ -1,12 +1,12 @@
-# Waveshare ESP32-S3-Touch-LCD-7B 6-DOF Robot Arm Hardware & Telemetry Guide
+# Waveshare ESP32-S3-Touch-LCD-7C 6-DOF Robot Arm Hardware & Telemetry Guide
 
-This document describes the hardware configuration, pinout mapping, wiring diagrams, and telemetry features for the 6-DOF Robot Arm powered by the **Waveshare ESP32-S3-Touch-LCD-7B (7.0-inch 1024x600 High-Definition Capacitive Touchscreen)** module (Version B), substituted for the standard ESP 32 Devkit.
+This document describes the hardware configuration, pinout mapping, wiring diagrams, and telemetry features for the 6-DOF Robot Arm powered by the **Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 1024x600 High-Definition Capacitive Touchscreen)** module (Version C), substituted for the standard ESP 32 Devkit.
 
 ---
 
-## 1. Overview & 7.0-Inch (Version B) Specifications
+## 1. Overview & 7.0-Inch (Version C) Specifications
 
-| Feature | Legacy ESP 32 DevKit | **Waveshare ESP32-S3-Touch-LCD-7B (Version B)** |
+| Feature | Legacy ESP 32 DevKit | **Waveshare ESP32-S3-Touch-LCD-7C (Version C)** |
 | :--- | :--- | :--- |
 | **Interactive Interface** | Headless (Terminal only) | **7.0-inch 1024×600 High-Definition RGB Display + GT911 Capacitive Multi-Touch** |
 | **Backlight & Power** | Fixed / External | **Onboard CH422G I/O Expander (`EXIO2` Backlight DISP, `EXIO6` VCOM/Power)** |
@@ -22,9 +22,9 @@ This document describes the hardware configuration, pinout mapping, wiring diagr
 ## 2. Hardware Pinout & Wiring
 
 ### A. I2C Bus Connection (PCA9685 16-Channel Servo Driver)
-Connect the PCA9685 servo driver (I2C address `0x40`) to the **Waveshare ESP32-S3-Touch-LCD-7B** I2C header:
+Connect the PCA9685 servo driver (I2C address `0x40`) to the **Waveshare ESP32-S3-Touch-LCD-7C** I2C header:
 
-| ESP32-S3 7B Pin | PCA9685 Driver (`0x40`) | Description |
+| ESP32-S3 7C Pin | PCA9685 Driver (`0x40`) | Description |
 | :--- | :--- | :--- |
 | **GPIO 8 (SDA)** | SDA | I2C Data line (3.3V) |
 | **GPIO 9 (SCL)** | SCL | I2C Clock line (3.3V) |
@@ -35,29 +35,25 @@ Connect the PCA9685 servo driver (I2C address `0x40`) to the **Waveshare ESP32-S
 > [!IMPORTANT]
 > **Power Isolation**: Never power the 6 high-torque robotic servos from the ESP32 3.3V/5V pin. Connect an external 5V–6V 5A power supply to the **V+** terminal of the PCA9685 and connect **GND** to the ESP32-S3 GND.
 
-### B. MAX98357A I2S Mono Audio Amplifier Wiring
+### B. Onboard Waveshare ESP32-S3-Touch-LCD-7C Audio Hardware
 
-Connect the **MAX98357A I2S Mono Class-D Audio Amplifier** module:
+The **Waveshare ESP32-S3-Touch-LCD-7C** includes **built-in onboard audio hardware** (I2S audio codec / Class-D power amplifier circuit and onboard speaker connector). **No external audio amplifier module is required.**
 
 ```
-[ Waveshare ESP32-S3-Touch-LCD-7B ]            [ MAX98357A I2S Amp ]
-  ├── 5V (or 3.3V) ───────────────────────────────> VIN (5V recommended for 3.2W)
-  ├── GND ────────────────────────────────────────> GND
-  ├── GPIO 19 (I2S BCLK) ─────────────────────────> BCLK
-  ├── GPIO 20 (I2S LRC / WS) ─────────────────────> LRC
-  └── GPIO 21 (I2S DOUT) ─────────────────────────> DIN
-                                                    GAIN ───> Open (9dB Default) or GND (6dB)
-                                                    SD_MODE > Open / Float (L+R Mono Mix)
-                                                    [ + / - ] ──> 4Ω - 8Ω 2W-3W Speaker
+[ Waveshare ESP32-S3-Touch-LCD-7C Onboard PCB ]
+  ├── Onboard I2S BCLK  ─> GPIO 19
+  ├── Onboard I2S LRC   ─> GPIO 20
+  ├── Onboard I2S DOUT  ─> GPIO 21
+  └── Onboard Speaker Header ──> Connect directly to 8Ω 1W / 4Ω 2W Mini Speaker
 ```
 
 | Signal | ESP32-S3 Pin | Description |
 | :--- | :--- | :--- |
 | **I2S BCLK** | **GPIO 19** | Bit Clock (BCK) |
 | **I2S LRC** | **GPIO 20** | Word Select (WS / LRCLK) |
-| **I2S DOUT** | **GPIO 21** | Serial Data (DIN on MAX98357A) |
+| **I2S DOUT** | **GPIO 21** | Serial Data (DIN) |
 
-### C. Onboard Display, Touch & I/O Expander Pinout (Waveshare 7B)
+### C. Onboard Display, Touch & I/O Expander Pinout (Waveshare 7C)
 
 | Function | ESP32-S3 / IO Expander Pin | Description |
 | :--- | :--- | :--- |
@@ -125,7 +121,7 @@ Connect the **MAX98357A I2S Mono Class-D Audio Amplifier** module:
 ## 6. Arduino IDE Flashing Settings
 
 1. Open `esp32_arm/esp32_arm.ino` in **Arduino IDE**.
-2. Select Board: **ESP32S3 Dev Module** (or **Waveshare ESP32-S3-Touch-LCD-7B**).
+2. Select Board: **ESP32S3 Dev Module** (or **Waveshare ESP32-S3-Touch-LCD-7C**).
 3. Recommended Board Configuration:
    - **USB CDC On Boot**: *Enabled*
    - **Flash Size**: *16MB (128Mb)*

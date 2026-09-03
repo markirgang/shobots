@@ -1,12 +1,12 @@
-# GitHub Setup & Management Guide for Hexapod Controller
+# GitHub Setup & Management Guide for Shobots
 
-This guide explains how to initialize Git, configure `git tree`, create a GitHub repository, push code, and manage branches for **Hexapod Controller**.
+This guide explains how to initialize Git, configure `git tree`, create a GitHub repository, push code, and manage branches for **Shobots**.
 
 ---
 
 ## 1. Local Git Initialization
 
-If Git is not already initialized in your project folder, open PowerShell or Command Prompt in your `Hexapod` project directory and run:
+If Git is not already initialized in your project folder, open PowerShell or Command Prompt in your `shobots` project directory and run:
 
 ```bash
 git init
@@ -25,7 +25,7 @@ Now, whenever you run `git tree`, Git will output a colorized graph of all commi
 
 1. Go to [GitHub](https://github.com) and sign in to your account.
 2. Click the **`+`** icon in the top right and select **New repository**.
-3. Name your repository: `Hexapod` (or `Hexapod-Controller`).
+3. Name your repository: `shobots`.
 4. Choose **Public** or **Private**.
 5. Do **NOT** initialize with a README, .gitignore, or license (we already have them in our project).
 6. Click **Create repository**.
@@ -34,20 +34,20 @@ Now, whenever you run `git tree`, Git will output a colorized graph of all commi
 
 ## 3. Pushing Local Code to GitHub
 
-Copy the repository URL provided by GitHub (e.g. `https://github.com/<your-username>/Hexapod.git`) and run:
+Copy the repository URL provided by GitHub (e.g. `https://github.com/<your-username>/shobots.git`) and run:
 
 ```bash
 # Add all files to staging
 git add .
 
 # Create initial commit
-git commit -m "Initial commit of Hexapod Controller"
+git commit -m "Initial commit of Shobots"
 
 # Set main branch
 git branch -M main
 
 # Add GitHub remote repository
-git remote add origin https://github.com/<your-username>/Hexapod.git
+git remote add origin https://github.com/<your-username>/shobots.git
 
 # Push code to GitHub
 git push -u origin main
@@ -55,7 +55,7 @@ git push -u origin main
 
 ---
 
-## 4. Useful Git Commands for Hexapod
+## 4. Useful Git Commands for Shobots
 
 | Command | Action |
 | :--- | :--- |
