@@ -1137,6 +1137,64 @@ def choose_hexapod_bt_port():
 choose_shobots_bt_port = choose_hexapod_bt_port
 
 
+def scan_rover_bluetooth_ports():
+    """
+    Scans system serial / Bluetooth ports for connected Waveshare Wave Rover devices (broadcast: waverover / wave-rover).
+    Returns:
+      display_options: list of human-readable labels for Comboboxes
+      device_map: dict mapping label -> raw device name or BT broadcast identifier
+      detected_bt_label: label for auto-detected Bluetooth / Serial device
+    """
+    display_options = ["waverover (Waveshare Wave Rover BT)", "wave-rover (Legacy BT Broadcast)", "None (Simulation Mode)"]
+    device_map = {
+        "waverover (Waveshare Wave Rover BT)": "waverover",
+        "wave-rover (Legacy BT Broadcast)": "wave-rover",
+        "None (Simulation Mode)": "None"
+    }
+
+    try:
+        import serial.tools.list_ports
+        ports = list(serial.tools.list_ports.comports())
+        for p in ports:
+            dev = p.device
+            desc = p.description or ""
+            comb = f"{dev} {desc}".lower()
+            if "rover" in comb or "waverover" in comb:
+                label = f"{dev} - Waveshare Wave Rover ({desc})"
+            elif "bluetooth" in comb:
+                label = f"{dev} - Bluetooth ({desc})"
+            elif "esp32" in comb or "touch" in comb:
+                label = f"{dev} - ESP32 ({desc})"
+            elif desc and desc != dev:
+                label = f"{dev} ({desc})"
+            else:
+                label = dev
+            display_options.append(label)
+            device_map[label] = dev
+    except Exception as e:
+        print(f"[Rover Bluetooth/Serial Scan Error] {e}")
+
+    detected_bt_label = display_options[0]
+    return display_options, device_map, detected_bt_label
+
+
+def choose_rover_bt_port():
+    options, dev_map, auto_lbl = scan_rover_bluetooth_ports()
+    print("\nScanning for Waveshare Wave Rover Bluetooth / Serial connections...")
+    for idx, opt in enumerate(options):
+        print(f"  [{idx + 1}] {opt}")
+    choice = input(f"Select Waveshare Wave Rover connection [1-{len(options)}, default: 1 ({auto_lbl})]: ").strip()
+    if not choice:
+        return dev_map.get(auto_lbl, "waverover")
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(options):
+            return dev_map.get(options[idx], options[idx])
+    except ValueError:
+        return choice
+    return dev_map.get(auto_lbl, "waverover")
+
+
 class HexapodController:
     """
     Controller for a 6-Leg Hexapod Robot having an ESP-32-Touch-LCD connected to 2 PCA9685 Servo Drivers over Bluetooth or USB-CDC Serial.
@@ -1776,6 +1834,17 @@ class WaveRoverController:
 
         try:
             target = self.port
+            if not target.upper().startswith("COM") and not target.startswith("/dev/"):
+                opts, d_map, auto_lbl = scan_rover_bluetooth_ports()
+                if target in d_map:
+                    target = d_map[target]
+                elif target.lower() in ("waverover", "wave-rover", "rover", "waverover-touch-7c"):
+                    # Attempt to resolve Bluetooth or serial port matching rover
+                    for opt, dev_name in d_map.items():
+                        if dev_name and (dev_name.upper().startswith("COM") or dev_name.startswith("/dev/")):
+                            target = dev_name
+                            break
+
             if target.upper().startswith("COM") or target.startswith("/dev/"):
                 conn = serial.Serial()
                 conn.port = target
@@ -1785,7 +1854,7 @@ class WaveRoverController:
                 self.serial_conn = conn
                 self.simulated = False
                 self.connected_device = f"Waveshare Wave Rover ({target})"
-                return True, f"Connected to Waveshare Wave Rover on {target}"
+                return True, f"Connected to Waveshare Wave Rover via Bluetooth / Serial on {target}"
             else:
                 self.simulated = True
                 self.connected_device = f"Waveshare Wave Rover '{target}' (Simulated)"
@@ -4998,8 +5067,8 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
     tello_port_combo.grid(row=9, column=1, sticky=tk.W, pady=6)
     tello_port_combo.set(auto_tello_lbl)
 
-    # Waveshare Wave Rover COM Port Selector
-    ttk.Label(main_frame, text="Wave Rover COM (esp32_waverover.ino):").grid(row=10, column=0, sticky=tk.W, pady=6)
+    # Waveshare Wave Rover COM / Bluetooth Port Selector
+    ttk.Label(main_frame, text="Wave Rover COM / BT (esp32_waverover.ino):").grid(row=10, column=0, sticky=tk.W, pady=6)
     rover_port_combo = ttk.Combobox(main_frame, values=port_options, state="readonly", width=42)
     rover_port_combo.grid(row=10, column=1, sticky=tk.W, pady=6)
     rover_port_combo.set(auto_rover_lbl)
@@ -5338,7 +5407,7 @@ if __name__ == "__main__":
         esp32_right_port = esp32_birds_port
         esp32_arm_port = None
         esp32_tello_port = None
-        esp32_rover_port = None
+        esp32_rover_port = choose_rover_bt_port()
         hexapod_port = choose_hexapod_bt_port()
         hexapod_bt_port = hexapod_port
         tello_port = choose_tello_port()

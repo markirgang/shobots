@@ -24,16 +24,6 @@
 #include <math.h>
 #include "driver/i2s.h"
 
-#if defined(CONFIG_BT_ENABLED) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-#include <BluetoothSerial.h>
-#define HAS_BT_CLASSIC 1
-BluetoothSerial SerialBT;
-#endif
-
-#ifndef HAS_BT_CLASSIC
-#define HAS_BT_CLASSIC 0
-#endif
-
 // =============================================================================
 // Pin Mapping & Hardware Configurations
 // =============================================================================
@@ -389,32 +379,15 @@ void setup() {
   initI2SAudio();
   playHardwareSound("STARTUP");
 
-  // Initialize Bluetooth if supported
-#if HAS_BT_CLASSIC
-  if (SerialBT.begin("waverover")) {
-    Serial.println("[Bluetooth] Broadcasting as 'waverover' READY!");
-  }
-#else
-  Serial.println("[Info] High-speed USB CDC Serial active for Wave Rover.");
-#endif
-
   Serial.println("[Waveshare 7C Wave Rover Firmware Ready]");
 }
 
 void loop() {
-  // Listen for incoming USB Serial commands
+  // Listen for incoming Serial commands
   while (Serial.available()) {
     String line = Serial.readStringUntil('\n');
     parseSerialCommand(line);
   }
-
-  // Listen for incoming Bluetooth commands (if available)
-#if HAS_BT_CLASSIC
-  while (SerialBT.available()) {
-    String line = SerialBT.readStringUntil('\n');
-    parseSerialCommand(line);
-  }
-#endif
 
   // Handle AI Speech Animatronics Timers & Oscillations
   if (isAiSpeaking) {

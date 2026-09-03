@@ -100,10 +100,23 @@ The L298N motor controller drives two independent DC motors:
 
 ---
 
-## 4. Flashing Firmware (Arduino IDE / PlatformIO)
+## 4. 📶 Bluetooth Connectivity & Python App Setup
+
+The Wave Rover firmware supports dual USB CDC Serial and Bluetooth communication:
+- **Bluetooth Broadcast Name**: `waverover` (also supports aliases `wave-rover` and `waverover-touch-7c`)
+- **Baud Rate**: `115200`
+- **Windows Pairing**:
+  1. Power on the ESP32 Wave Rover module.
+  2. Open Windows Bluetooth Settings -> **Add Device** -> Select `waverover`.
+  3. Windows assigns a Virtual Bluetooth Serial COM port (e.g. `COM4`).
+  4. Launch `main.py` (GUI or CLI mode) and select the `waverover (Waveshare Wave Rover BT)` or assigned COM port.
+
+---
+
+## 5. Flashing Firmware (Arduino IDE / PlatformIO)
 
 1. Open `esp32_waverover/esp32_waverover.ino` in **Arduino IDE**.
-2. Select Board: **ESP32S3 Dev Module** (or **Waveshare ESP32-S3-Touch-LCD-7C**).
+2. Select Board: **ESP32 Dev Module** (or **ESP32S3 Dev Module** / **Waveshare ESP32-S3-Touch-LCD-7C**).
 3. Board Settings:
    - **USB CDC On Boot**: *Enabled*
    - **Flash Size**: *16MB (128Mb)*
