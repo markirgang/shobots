@@ -1,125 +1,114 @@
-# Waveshare ESP32-S3-Touch-LCD-7C Wave Rover Mobile Platform Guide
+# ESP32 4-Motor AWD Mobile Platform Hardware Guide (Dual LM298 Motor Drivers)
 
-This document describes the hardware configuration, pinout mapping, L298N (LM298) motor controller wiring diagrams, LED eyes wiring, and flashing instructions for the **Waveshare Wave Rover 4WD Mobile Platform** running on the **Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 1024×600 High-Definition Capacitive Touchscreen)** module.
+This document describes the hardware configuration, pinout mapping, Dual LM298 (L298N) motor controller wiring diagrams, LED eyes wiring, and flashing instructions for the **Standard 4-Motor AWD Mobile Platform** running on an **ESP32 / ESP32-S3** microcontroller.
 
 ---
 
 ## 1. Overview & Hardware Specifications
 
-| Feature | **Waveshare ESP32-S3-Touch-LCD-7C Wave Rover** |
+| Feature | **ESP32 4-Motor AWD Mobile Platform** |
 | :--- | :--- |
-| **Display Panel** | **7.0-inch 1024×600 High-Definition IPS RGB Display** |
-| **Touch Controller** | **Goodix GT911 5-Point Capacitive Multi-Touch (I2C: `0x5D`)** |
-| **IO Expander** | **WCH CH422G (Addresses `0x24`/`0x38`) for Backlight, LCD Power & Touch Reset** |
-| **Onboard Controls** | **1024×600 HD Widescreen Touch Buttons (Forward, Back, Left, Right, Spin, Stop, Mouth, Body, Eyes, Speed, Routines)** |
-| **Telemetry & Visuals** | **Live Telemetry, Motor Speeds, Pan-Tilt Angles & Animated Cyber Rover Mascot** |
-| **Audio Output** | **MAX98357A I2S Mono Audio Amplifier (BCLK=19, LRC=20, DIN=21)** |
-| **L298N Motor Driver** | **Dual H-Bridge Motor Driver for DC Mouth Motor & DC Body Up/Down Motion Motor** |
+| **Drive Architecture** | **4-Motor All-Wheel Drive (AWD) Differential Drive System** |
+| **Motor Controllers** | **2 x LM298 (L298N) Reversing Dual H-Bridge Motor Drivers** |
+| **Front LM298 Driver** | **Channel A: Front Left Motor | Channel B: Front Right Motor** |
+| **Rear LM298 Driver** | **Channel A: Rear Left Motor | Channel B: Rear Right Motor** |
+| **Ultrasonic Sensors** | **4 x HC-SR04 Proximity Sensors (Front, Rear, Left, Right)** |
+| **TouchLCD Readout** | **Waveshare TouchLCD-7C Live Distance HUD (cm) & AI Tool Integration** |
 | **Eye LEDs** | **Digital GPIO Output for Animated Eye LEDs** |
-| **Microcontroller** | **ESP32-S3-WROOM-1 (16MB Flash, 8MB Octal PSRAM @ 240MHz)** |
+| **Headlights** | **Digital GPIO Output for Front Headlights** |
+| **Pan-Tilt Servos** | **Pan-Tilt Servos (Pan 0-180°, Tilt 0-180°)** |
+| **Audio Output** | **MAX98357A I2S Mono Audio Amplifier (BCLK=19, LRC=20, DIN=21)** |
+| **Microcontroller** | **ESP32 / ESP32-S3 Dev Module** |
 
 ---
 
 ## 2. Hardware Pinout & Wiring
 
-### A. L298N (LM298) Dual H-Bridge Motor Driver Wiring
+### A. Dual LM298 (L298N) Motor Driver Wiring
 
-The L298N motor controller drives two independent DC motors:
-1. **DC Mouth Motor** (Channel A / OUT1 & OUT2): Power ON = Mouth Open; Power OFF = Mouth Closed.
-2. **DC Body Motion Motor** (Channel B / OUT3 & OUT4): Power ON = Body attached to mouth moves up and down via eccentric cam / mechanical link; Power OFF = Stopped.
+The mobile platform uses two LM298 dual motor drivers to power all 4 wheels independently:
 
-| ESP32-S3 7C Pin | L298N Pin | Target Component | Description / Function |
+1. **Front LM298 Motor Driver (Front Axle)**:
+   - **Channel A (OUT1 & OUT2)**: Front Left Wheel / Motor
+   - **Channel B (OUT3 & OUT4)**: Front Right Wheel / Motor
+2. **Rear LM298 Motor Driver (Rear Axle)**:
+   - **Channel A (OUT1 & OUT2)**: Rear Left Wheel / Motor
+   - **Channel B (OUT3 & OUT4)**: Rear Right Wheel / Motor
+
+#### 1. Front LM298 Driver Wiring Table
+| ESP32 Pin | Front LM298 Pin | Target Motor | Description / Function |
 | :--- | :--- | :--- | :--- |
-| **GPIO 11** | **IN1** | DC Mouth Motor | Mouth Motor Direction Line 1 |
-| **GPIO 12** | **IN2** | DC Mouth Motor | Mouth Motor Direction Line 2 |
-| **GPIO 13** | **ENA** | DC Mouth Motor | Mouth Enable / PWM Speed Control |
-| **GPIO 14** | **IN3** | DC Body Motion Motor | Body Up/Down Motor Direction Line 1 |
-| **GPIO 15** | **IN4** | DC Body Motion Motor | Body Up/Down Motor Direction Line 2 |
-| **GPIO 16** | **ENB** | DC Body Motion Motor | Body Up/Down Enable / Speed Control |
-| **GND** | **GND** | L298N Ground | Common Shared Ground |
-| **External 5V-12V** | **VCC (+12V)** | Power Terminal | Motor Drive Battery Power Source |
+| **GPIO 11** | **IN1** | Front Left Motor | Direction Line 1 |
+| **GPIO 12** | **IN2** | Front Left Motor | Direction Line 2 |
+| **GPIO 13** | **ENA** | Front Left Motor | ENA PWM Speed Control |
+| **GPIO 14** | **IN3** | Front Right Motor | Direction Line 1 |
+| **GPIO 15** | **IN4** | Front Right Motor | Direction Line 2 |
+| **GPIO 16** | **ENB** | Front Right Motor | ENB PWM Speed Control |
+
+#### 2. Rear LM298 Driver Wiring Table
+| ESP32 Pin | Rear LM298 Pin | Target Motor | Description / Function |
+| :--- | :--- | :--- | :--- |
+| **GPIO 1** | **IN1** | Rear Left Motor | Direction Line 1 |
+| **GPIO 2** | **IN2** | Rear Left Motor | Direction Line 2 |
+| **GPIO 42** | **ENA** | Rear Left Motor | ENA PWM Speed Control |
+| **GPIO 41** | **IN3** | Rear Right Motor | Direction Line 1 |
+| **GPIO 8** | **IN4** | Rear Right Motor | Direction Line 2 |
+| **GPIO 9** | **ENB** | Rear Right Motor | ENB PWM Speed Control |
 
 > [!IMPORTANT]
-> **Power Isolation**: Do **NOT** power the L298N motor controller or DC motors from the ESP32 3.3V pin. Connect an external 6V–12V battery power source to the **VCC** terminal of the L298N driver and ensure **GND** is common between the ESP32 and L298N.
+> **Power Isolation**: Do **NOT** power the LM298 motor controllers or DC motors from the ESP32 3.3V pin. Connect an external 6V–12V battery power source to the **VCC (+12V)** terminals of both LM298 drivers and ensure **GND** is common between the ESP32 and both LM298 modules.
 
 ---
 
-### B. Eye LEDs Output Wiring
+## 3. 4WD Motion Matrix
 
-| ESP32-S3 Pin | Component | Connection | Description |
-| :--- | :--- | :--- | :--- |
-| **GPIO 10** | **Eye LEDs (Anode +)** | 220Ω Resistor to LED(+) | Digital Output for LED Eyes (ON/OFF/Blink/Pulse) |
-| **GND** | **Eye LEDs (Cathode -)** | Ground (-) | Shared Common Ground |
-
----
-
-### C. 4WD Drive Motors & Pan-Tilt Servos (PCA9685 / GPIO)
-
-| Function | Pin / Channel | Description |
-| :--- | :--- | :--- |
-| **Left Wheels Drive PWM** | `GPIO 1` | Left side 4WD motor speed PWM |
-| **Left Wheels Direction** | `GPIO 2` | Left side 4WD motor direction HIGH/LOW |
-| **Right Wheels Drive PWM** | `GPIO 42` | Right side 4WD motor speed PWM |
-| **Right Wheels Direction** | `GPIO 41` | Right side 4WD motor direction HIGH/LOW |
-| **Pan Servo (Heading)** | PCA9685 `Ch 0` / `GPIO 5` | Pan-Tilt Horizontal Rotation (0° to 180°, default 90°) |
-| **Tilt Servo (Pitch)** | PCA9685 `Ch 1` / `GPIO 6` | Pan-Tilt Vertical Pitch (0° to 180°, default 90°) |
-| **Headlights LED Pin** | `GPIO 7` | Front Headlights LED Output (ON/OFF) |
+| Action | Front Left (Front LM298 Ch A) | Front Right (Front LM298 Ch B) | Rear Left (Rear LM298 Ch A) | Rear Right (Rear LM298 Ch B) |
+| :--- | :--- | :--- | :--- | :--- |
+| **`forward`** | FORWARD | FORWARD | FORWARD | FORWARD |
+| **`back`** | REVERSE | REVERSE | REVERSE | REVERSE |
+| **`turn_left`** | REVERSE / SLOW | FORWARD | REVERSE / SLOW | FORWARD |
+| **`turn_right`** | FORWARD | REVERSE / SLOW | FORWARD | REVERSE / SLOW |
+| **`spin_left`** | REVERSE | FORWARD | REVERSE | FORWARD |
+| **`spin_right`** | FORWARD | REVERSE | FORWARD | REVERSE |
+| **`stop`** | OFF (PWM=0) | OFF (PWM=0) | OFF (PWM=0) | OFF (PWM=0) |
 
 ---
 
-### D. Onboard Waveshare ESP32-S3-Touch-LCD-7C Audio Hardware
-
-| Signal | ESP32-S3 Pin | Description |
-| :--- | :--- | :--- |
-| **I2S BCLK** | **GPIO 19** | Bit Clock (BCK) |
-| **I2S LRC** | **GPIO 20** | Word Select (WS / LRCLK) |
-| **I2S DOUT** | **GPIO 21** | Serial Data (DIN) |
-
----
-
-## 3. Serial & Audio Command Protocol
+## 4. Serial & Audio Command Protocol
 
 | Command Format | Example | Description |
 | :--- | :--- | :--- |
 | `ROVER:<action>` | `ROVER:forward` / `ROVER:stop` | Rover motion (`forward`, `back`, `turn_left`, `turn_right`, `spin_left`, `spin_right`, `stop`, `patrol`, `spin_360`, `dance`, `obstacle_avoidance`) |
-| `ROVER:MOUTH:<1\|0>` | `ROVER:MOUTH:1` | L298N DC Mouth Motor: `1` = Power ON (mouth open), `0` = Power OFF (mouth closed) |
-| `ROVER:BODY:<1\|0>` | `ROVER:BODY:1` | L298N DC Body Motion Motor: `1` = Power ON (moves body up/down), `0` = Power OFF |
 | `ROVER:EYES:<1\|0>` | `ROVER:EYES:1` | Eye LEDs Output: `1` = Power ON, `0` = Power OFF |
 | `ROVER:SPEED:<0-100>` | `ROVER:SPEED:80` | Sets 4WD drive motor speed percentage |
 | `ROVER:PANTILT:<pan>:<tilt>` | `ROVER:PANTILT:90:45` | Sets Pan-Tilt camera servo angles in degrees |
 | `ROVER:LED:<1\|0>` | `ROVER:LED:1` | Turns front headlights ON (`1`) or OFF (`0`) |
-| `ROVER:LCD:MSG:<msg>` | `ROVER:LCD:MSG:Patrolling` | Displays custom status message on the 1024×600 HD touchscreen |
-| `AI_SPEAKING:<1\|0>` | `AI_SPEAKING:1` | Real-time AI talking signal: `1` = Mouth opens & pulses, body sways up/down, eyes illuminate; `0` = Mouth closes, body stops, eyes idle |
-| `AUDIO:ROVER_ENGINE` | `AUDIO:ROVER_ENGINE` | Plays diesel engine hum sound effect over MAX98357A I2S |
-| `AUDIO:HORN` | `AUDIO:HORN` | Plays dual-tone car/rover horn alert |
-| `AUDIO:STARTUP` | `AUDIO:STARTUP` | Plays sci-fi vehicle power-up sweep |
+| `ROVER:LCD:MSG:<msg>` | `ROVER:LCD:MSG:Patrolling` | Custom status message |
+| `AI_SPEAKING:<1\|0>` | `AI_SPEAKING:1` | Real-time AI talking signal: `1` = Eyes illuminate & pulse; `0` = Eyes idle |
+| `AUDIO:ROVER_ENGINE` | `AUDIO:ROVER_ENGINE` | Plays engine hum sound effect over MAX98357A I2S |
+| `AUDIO:HORN` | `AUDIO:HORN` | Plays dual-tone horn alert |
+| `AUDIO:STARTUP` | `AUDIO:STARTUP` | Plays vehicle power-up sweep |
 | `AUDIO:SHUTDOWN` | `AUDIO:SHUTDOWN` | Plays descending vehicle power-down sweep |
 | `AUDIO:ALERT` | `AUDIO:ALERT` | Plays emergency siren warning tone |
 | `AUDIO:TURBO` | `AUDIO:TURBO` | Plays turbo boost acceleration sound effect |
-| `AUDIO:BRAKE` | `AUDIO:BRAKE` | Plays tire squeal / braking sound effect |
+| `AUDIO:BRAKE` | `AUDIO:BRAKE` | Plays braking sound effect |
 
 ---
 
-## 4. 📶 Bluetooth Connectivity & Python App Setup
+## 5. 📶 Connectivity & Python App Setup
 
-The Wave Rover firmware supports dual USB CDC Serial and Bluetooth communication:
-- **Bluetooth Broadcast Name**: `waverover` (also supports aliases `wave-rover` and `waverover-touch-7c`)
+The 4WD Rover firmware supports USB CDC Serial and Bluetooth communication:
+- **Bluetooth Broadcast Name**: `waverover` (also supports `rover` or `wave-rover`)
 - **Baud Rate**: `115200`
-- **Windows Pairing**:
-  1. Power on the ESP32 Wave Rover module.
-  2. Open Windows Bluetooth Settings -> **Add Device** -> Select `waverover`.
-  3. Windows assigns a Virtual Bluetooth Serial COM port (e.g. `COM4`).
-  4. Launch `main.py` (GUI or CLI mode) and select the `waverover (Waveshare Wave Rover BT)` or assigned COM port.
+- **Setup**:
+  1. Power on the ESP32 4WD Rover module.
+  2. Pair over Bluetooth or connect USB cable to your PC.
+  3. Launch `main.py` (GUI or CLI mode) and select the `waverover` COM / Bluetooth port.
 
 ---
 
-## 5. Flashing Firmware (Arduino IDE / PlatformIO)
+## 6. Flashing Firmware (Arduino IDE / PlatformIO)
 
 1. Open `esp32_waverover/esp32_waverover.ino` in **Arduino IDE**.
-2. Select Board: **ESP32 Dev Module** (or **ESP32S3 Dev Module** / **Waveshare ESP32-S3-Touch-LCD-7C**).
-3. Board Settings:
-   - **USB CDC On Boot**: *Enabled*
-   - **Flash Size**: *16MB (128Mb)*
-   - **Partition Scheme**: *16MB Flash (3MB APP / 9.9MB FATFS / SPIFFS)*
-   - **PSRAM**: *OPI PSRAM* (8MB)
-4. Select COM Port and click **Upload**.
+2. Select Board: **ESP32 Dev Module** or **ESP32S3 Dev Module**.
+3. Select COM Port and click **Upload**.

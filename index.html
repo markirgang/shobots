@@ -510,14 +510,14 @@
           </div>
         </div>
 
-        <!-- 🚗 Waveshare Wave Rover & L298N Speech Animatronics Section -->
+        <!-- 🚗 4WD Mobile Platform (Dual LM298 Motor Drivers) Section -->
         <div class="rover-control-section" style="margin-top: 1rem; background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 41, 59, 0.7) 100%); border: 1px solid rgba(34, 197, 94, 0.35); border-radius: 12px; padding: 1rem; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);">
           <div class="section-title-bar" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
               <i class="fa-solid fa-truck-monster" style="color: #4ade80; font-size: 1.1rem;"></i>
               <div>
-                <h3 style="font-size: 0.95rem; font-weight: 700; color: #f8fafc; margin: 0;">Waveshare Wave Rover Mobile Platform & Speech Animatronics</h3>
-                <span style="font-size: 0.75rem; color: #94a3b8;">4WD Drive, L298N DC Mouth Motor, Body Up/Down Motor & Eye LEDs</span>
+                <h3 style="font-size: 0.95rem; font-weight: 700; color: #f8fafc; margin: 0;">4WD Mobile Platform (Dual LM298 Motor Drivers)</h3>
+                <span style="font-size: 0.75rem; color: #94a3b8;">4WD All-Wheel Drive, Front LM298 (Ch A: FL / Ch B: FR), Rear LM298 (Ch A: RL / Ch B: RR) & Eye LEDs</span>
               </div>
             </div>
           </div>
@@ -563,6 +563,32 @@
             <button type="button" class="rover-action-btn text-btn btn-small" data-cmd="ROVER:back" style="width: 120px; background: rgba(56, 189, 248, 0.25); border: 1px solid #38bdf8; color: #38bdf8;">
               <i class="fa-solid fa-arrow-down"></i> Reverse
             </button>
+          </div>
+
+          <!-- 4-Way HC-SR04 Ultrasonic Proximity HUD Gauge -->
+          <div class="sonar-hud-container" style="margin-top: 0.75rem; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+              <i class="fa-solid fa-radar" style="color: #38bdf8;"></i>
+              <h4 style="font-size: 0.85rem; font-weight: 600; color: #f8fafc; margin: 0;">4-Way HC-SR04 Ultrasonic Proximity Sensors (Waveshare TouchLCD-7C)</h4>
+            </div>
+            <div class="sonar-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; text-align: center;">
+              <div class="sonar-card" style="background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 0.4rem;">
+                <span style="font-size: 0.7rem; color: #94a3b8; display: block;">⬆️ FRONT</span>
+                <span id="sonar-front-val" style="font-size: 1rem; font-weight: 700; color: #4ade80;">-- cm</span>
+              </div>
+              <div class="sonar-card" style="background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 0.4rem;">
+                <span style="font-size: 0.7rem; color: #94a3b8; display: block;">⬇️ REAR</span>
+                <span id="sonar-rear-val" style="font-size: 1rem; font-weight: 700; color: #4ade80;">-- cm</span>
+              </div>
+              <div class="sonar-card" style="background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 0.4rem;">
+                <span style="font-size: 0.7rem; color: #94a3b8; display: block;">⬅️ LEFT</span>
+                <span id="sonar-left-val" style="font-size: 1rem; font-weight: 700; color: #4ade80;">-- cm</span>
+              </div>
+              <div class="sonar-card" style="background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 0.4rem;">
+                <span style="font-size: 0.7rem; color: #94a3b8; display: block;">➡️ RIGHT</span>
+                <span id="sonar-right-val" style="font-size: 1rem; font-weight: 700; color: #4ade80;">-- cm</span>
+              </div>
+            </div>
           </div>
         </div>
 

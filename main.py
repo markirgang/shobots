@@ -642,12 +642,11 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         types.FunctionDeclaration(
             name="control_wave_rover",
             description=(
-                "Controls the Waveshare Wave Rover 4WD mobile robot platform powered by ESP32-S3 (over Serial / Bluetooth 'wave-rover' / WiFi). "
-                "Supports movement ('forward', 'back', 'turn_left', 'turn_right', 'spin_left', 'spin_right', 'stop'), "
-                "L298N (LM298) DC Mouth Motor ('mouth_open', 'mouth_close'), L298N DC Body Motion Motor ('body_on', 'body_off'), "
+                "Controls the standard 4WD mobile robot platform powered by ESP32 using 2 x LM298 dual reversing motor drivers (Front LM298: Ch A Front Left, Ch B Front Right; Rear LM298: Ch A Rear Left, Ch B Rear Right). "
+                "Supports 4WD movement ('forward', 'back', 'turn_left', 'turn_right', 'spin_left', 'spin_right', 'stop'), "
                 "Eye LEDs ('eyes_on', 'eyes_off'), drive speed (0-100%), pan-tilt camera angles (pan, tilt 0-180 deg), "
                 "headlights ('headlight_on', 'headlight_off'), preset routines ('patrol', 'spin_360', 'dance', 'obstacle_avoidance'), "
-                "and custom status messages on the onboard touch screen."
+                "and custom status messages on the onboard screen."
             ),
             parameters={
                 "type": "object",
@@ -796,16 +795,36 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         )
     )
 
+    function_declarations.append(
+        types.FunctionDeclaration(
+            name="get_proximity_sensors",
+            description=(
+                "Returns current distance measurements (in centimeters) from the 4 HC-SR04 ultrasonic proximity sensors "
+                "attached to the front, rear, left, and right of the WaveRover or Hexapod platform. "
+                "Use this to check for obstacles, measure clear space, or verify navigation paths."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "robot": {
+                        "type": "string",
+                        "description": "Target robot platform: 'rover' (or 'waverover') or 'hexapod'."
+                    }
+                }
+            }
+        )
+    )
+
     if function_declarations:
         tools.append(types.Tool(function_declarations=function_declarations))
 
     system_instruction = (
         "You are a helpful real-time multimodal voice assistant running on the user's local computer. "
         "You have direct access to local hardware and smart devices: an onboard LED of an ESP32 microcontroller, "
-        "a 6-leg Hexapod robot powered by the ESP-32-Touch-LCD controller (Bluetooth: 'hexapod-touch-lcd' / Serial) with an onboard interactive touch screen, "
+        "a 6-leg Hexapod robot powered by the ESP-32-Touch-LCD controller (Bluetooth: 'hexapod-touch-lcd' / Serial) with an onboard interactive touch screen and 4-way HC-SR04 ultrasonic proximity sensors, "
         "a 6-DOF Robot Arm powered by a Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 1024x600 HD Capacitive Touchscreen with live telemetry & animation) via PCA9685, "
         "a Birds & LED stage controller powered by a unified Waveshare ESP32-S3-Touch-LCD-7 (7.0-inch 800x480 Capacitive Touchscreen with MCP23017 I/O Expander, Dual PCA9685 Servo Drivers, animated parrot mascot, and light shows), "
-        "a Waveshare Wave Rover 4WD mobile platform (with L298N DC mouth motor, DC body motion motor, eye LEDs, pan-tilt camera, and MAX98357A I2S audio), "
+        "a 4-Motor AWD Mobile Platform powered by ESP32 (with 2 x LM298 reversing dual motor drivers for Front Left/Right and Rear Left/Right wheels, eye LEDs, pan-tilt camera, 4-way HC-SR04 ultrasonic proximity sensors, and MAX98357A I2S audio), "
         "a Tello drone, Leviton smart lights, and eWeLink (Sonoff) devices. All 5 ESP32-S3 touchscreen controllers are equipped with MAX98357A I2S Class-D mono audio amplifiers.\n\n"
         "1. VISUAL MODALITY AWARENESS:\n"
         "   - You are receiving a continuous, real-time video stream (from the user's webcam or screen share).\n"
@@ -815,9 +834,10 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         "   - The video stream is sent to you at exactly 1 frame per second (1 FPS). Each frame you receive represents exactly 1 second of real time.\n"
         "   - When estimating time or counting seconds (e.g., if the user asks you to wait 5 seconds, count seconds, or track time), use the number of incoming frames as your clock (e.g. 5 frames = 5 seconds). Do not rush or estimate time based on text-generation speeds; wait for the appropriate amount of time to pass.\n\n"
         "3. HARDWARE CONTROL:\n"
+        "   - HC-SR04 Proximity Sensors: You MUST use the `get_proximity_sensors` tool when the user asks verbally or visually about distances, surrounding obstacles, or clear paths around the WaveRover or Hexapod platform.\n"
         "   - MAX98357A Hardware Audio: You MUST use the `play_hardware_sound` tool when the user asks verbally to play hardware sounds, bird chirps/songs, hexapod droid chatter/steps, robot arm grab/release chimes, rover engine/horn sounds, or drone radar pings/takeoff audio on any of the ESP32 touchscreen modules.\n"
         "   - Bird Routines & Animations: You MUST use the `trigger_bird_routine` tool when the user asks verbally or visually to perform singing ('sing'), spotlight sweeping ('sweep'), turntable dancing ('dance'), light shows ('lightshow'), bird symphony ('symphony'), or return to home ('home') on the Waveshare 7-inch Touch LCD controller.\n"
-        "   - Waveshare Wave Rover: You MUST use the `control_wave_rover` tool when the user asks verbally or visually to drive forward/back, turn, spin, patrol, move pan-tilt camera, control headlights, open/close the DC mouth motor (L298N), turn on/off the body up/down motor, toggle Eye LEDs, or display status messages on the Waveshare Wave Rover 4WD mobile platform.\n"
+        "   - 4WD Rover Platform: You MUST use the `control_wave_rover` tool when the user asks verbally or visually to drive forward/back, turn, spin, patrol, move pan-tilt camera, control headlights, toggle Eye LEDs, or display status messages on the 4-Motor AWD Mobile Platform powered by dual LM298 motor drivers.\n"
         "   - Robot Arm: You MUST use the `control_robot_arm` tool when the user asks verbally or visually to control the 6-DOF robot arm powered by the Waveshare ESP32-S3-Touch-LCD-7C, perform gestures like 'yes', 'no', 'high_five', 'wave', 'bow', 'dance', execute pick & place, or set arm joint angles.\n"
         "   - Hexapod Robot: You MUST use the `control_hexapod` tool when the user asks verbally or visually to control the 6-leg hexapod robot powered by the ESP-32-Touch-LCD (e.g. walk, run, wave left arm, wave right arm, dance, sit, stand, flat to floor, turn left, turn right, bow, set leg joints, or display messages on the robot's screen).\n"
         "   - ESP32 PCA9685 Servos: You MUST use the `set_servo_angle` tool when the user asks verbally or visually to move, position, turn, or adjust any of the servos on the Birds ESP32-S3 Touchscreen (Left/Right sides) or Arm ESP32 (e.g. Left/Right Parrot Up/Dn, Right Spotlight Rotate, Center Bird Up/Dn, Center Turntable Rotate, Base/Shoulder/Elbow, etc.) to a specific degree angle (0 to 180 degrees).\n"
@@ -1235,7 +1255,41 @@ class HexapodController:
         self.current_motion = "idle"
         self.motion_thread = None
         self.stop_motion_flag = False
+        self.sonar_distances = {"front": 50, "rear": 110, "left": 35, "right": 90}
         self.gui_window = None
+
+    def parse_sonar_telemetry(self, line: str):
+        line = line.strip()
+        if line.startswith("SONAR:"):
+            parts = line.split(":")
+            try:
+                if len(parts) >= 9:
+                    self.sonar_distances["front"] = int(parts[2])
+                    self.sonar_distances["rear"] = int(parts[4])
+                    self.sonar_distances["left"] = int(parts[6])
+                    self.sonar_distances["right"] = int(parts[8])
+            except Exception:
+                pass
+
+    def get_sonar_distances(self) -> dict:
+        if self.simulated:
+            import random
+            return {
+                "front_cm": random.randint(30, 160),
+                "rear_cm": random.randint(70, 180),
+                "left_cm": random.randint(20, 100),
+                "right_cm": random.randint(45, 120),
+                "status": "simulated",
+                "device": "Hexapod"
+            }
+        return {
+            "front_cm": self.sonar_distances.get("front", 999),
+            "rear_cm": self.sonar_distances.get("rear", 999),
+            "left_cm": self.sonar_distances.get("left", 999),
+            "right_cm": self.sonar_distances.get("right", 999),
+            "status": "connected",
+            "device": "Hexapod"
+        }
 
     def connect(self, bt_port=None):
         import serial
@@ -1786,16 +1840,16 @@ class RobotArmController:
 
 class WaveRoverController:
     """
-    Controller for Waveshare Wave Rover 4WD Mobile Platform powered by ESP32-S3 (or Waveshare ESP32-S3-Touch-LCD-7C).
+    Controller for Standard 4-Motor AWD Mobile Platform powered by ESP32 (with 2 x LM298 Reversing Dual Motor Drivers).
     Features:
-      - 4WD Differential Drive (forward, back, turn_left, turn_right, spin_left, spin_right, stop)
-      - L298N (LM298) Motor Controller Integration:
-          * DC Mouth Motor: Power ON = Open Mouth; Power OFF = Closed Mouth
-          * DC Body Motion Motor: Power ON = Body sways up and down
+      - Dual LM298 Motor Drivers:
+          * Front LM298: Channel A (Front Left Motor), Channel B (Front Right Motor)
+          * Rear LM298: Channel A (Rear Left Motor), Channel B (Rear Right Motor)
+      - 4WD AWD Differential Drive (forward, back, turn_left, turn_right, spin_left, spin_right, stop)
       - Eye LEDs Output: Digital GPIO Output for Eye LEDs (ON, OFF, Blink, Pulse)
       - Pan-Tilt Camera Servos (Pan 0-180°, Tilt 0-180°)
-      - Front Headlights LED
-      - Onboard Touch LCD Status Messages
+      - Front Headlights LED Output
+      - Onboard Status Messages
       - Preset Routines: patrol, spin_360, dance, obstacle_avoidance
       - Onboard MAX98357A I2S Audio Synthesis
     """
@@ -1806,15 +1860,49 @@ class WaveRoverController:
         self.simulated = True
         self.connected_device = "Not Connected"
         
-        self.mouth_state = False       # False = Closed (power off), True = Open (power on)
-        self.body_motor_state = False  # False = Off, True = On (body sways up/down)
+        self.mouth_state = False       # False = Closed, True = Open
+        self.body_motor_state = False  # False = Off, True = On
         self.eye_leds_state = True     # True = ON, False = OFF
         self.headlight_state = False  # True = ON, False = OFF
         self.speed = 75                # 0 - 100%
         self.pan_angle = 90            # 0 - 180 deg
         self.tilt_angle = 90           # 0 - 180 deg
         self.current_motion = "idle"
+        self.sonar_distances = {"front": 45, "rear": 120, "left": 30, "right": 85}
         self.gui_window = None
+
+    def parse_sonar_telemetry(self, line: str):
+        line = line.strip()
+        if line.startswith("SONAR:"):
+            parts = line.split(":")
+            try:
+                if len(parts) >= 9:
+                    self.sonar_distances["front"] = int(parts[2])
+                    self.sonar_distances["rear"] = int(parts[4])
+                    self.sonar_distances["left"] = int(parts[6])
+                    self.sonar_distances["right"] = int(parts[8])
+            except Exception:
+                pass
+
+    def get_sonar_distances(self) -> dict:
+        if self.simulated:
+            import random
+            return {
+                "front_cm": random.randint(35, 150),
+                "rear_cm": random.randint(80, 200),
+                "left_cm": random.randint(25, 90),
+                "right_cm": random.randint(40, 110),
+                "status": "simulated",
+                "device": "WaveRover"
+            }
+        return {
+            "front_cm": self.sonar_distances.get("front", 999),
+            "rear_cm": self.sonar_distances.get("rear", 999),
+            "left_cm": self.sonar_distances.get("left", 999),
+            "right_cm": self.sonar_distances.get("right", 999),
+            "status": "connected",
+            "device": "WaveRover"
+        }
 
     def connect(self, port=None):
         import serial
@@ -1830,7 +1918,7 @@ class WaveRoverController:
                 except Exception:
                     pass
             self.serial_conn = None
-            return True, "Waveshare Wave Rover set to Simulation Mode"
+            return True, "4WD Rover set to Simulation Mode"
 
         try:
             target = self.port
@@ -1853,16 +1941,16 @@ class WaveRoverController:
                 conn.open()
                 self.serial_conn = conn
                 self.simulated = False
-                self.connected_device = f"Waveshare Wave Rover ({target})"
-                return True, f"Connected to Waveshare Wave Rover via Bluetooth / Serial on {target}"
+                self.connected_device = f"4WD Rover Dual LM298 ({target})"
+                return True, f"Connected to 4WD Rover (Dual LM298) via Bluetooth / Serial on {target}"
             else:
                 self.simulated = True
-                self.connected_device = f"Waveshare Wave Rover '{target}' (Simulated)"
-                return True, f"Waveshare Wave Rover ('{target}') connected (Simulated mode)"
+                self.connected_device = f"4WD Rover '{target}' (Simulated)"
+                return True, f"4WD Rover ('{target}') connected (Simulated mode)"
         except Exception as e:
             self.simulated = True
             self.connected_device = f"Simulation Mode (Error: {e})"
-            return True, f"Waveshare Wave Rover fallback to Simulation Mode ({e})"
+            return True, f"4WD Rover fallback to Simulation Mode ({e})"
 
     def send_command(self, cmd_str: str):
         if not cmd_str.endswith("\r\n"):
@@ -4416,6 +4504,20 @@ class AudioLoop:
                                         id=fc.id
                                     )
                                 )
+                            elif fc.name == "get_proximity_sensors":
+                                robot = (fc.args.get("robot") or "rover").lower()
+                                if "hex" in robot:
+                                    result = await asyncio.to_thread(self.hexapod.get_sonar_distances)
+                                else:
+                                    result = await asyncio.to_thread(self.waverover.get_sonar_distances)
+
+                                function_responses.append(
+                                    types.FunctionResponse(
+                                        name=fc.name,
+                                        response=result,
+                                        id=fc.id
+                                    )
+                                )
                             elif fc.name == "trigger_bird_routine":
                                 routine = fc.args.get("routine", "home")
                                 result = await self.execute_bird_routine_async(routine)
@@ -5067,8 +5169,8 @@ def show_settings_dialog(pya_instance, default_mode="camera"):
     tello_port_combo.grid(row=9, column=1, sticky=tk.W, pady=6)
     tello_port_combo.set(auto_tello_lbl)
 
-    # Waveshare Wave Rover COM / Bluetooth Port Selector
-    ttk.Label(main_frame, text="Wave Rover COM / BT (esp32_waverover.ino):").grid(row=10, column=0, sticky=tk.W, pady=6)
+    # 4WD Rover COM / Bluetooth Port Selector
+    ttk.Label(main_frame, text="4WD Rover COM / BT (esp32_waverover.ino):").grid(row=10, column=0, sticky=tk.W, pady=6)
     rover_port_combo = ttk.Combobox(main_frame, values=port_options, state="readonly", width=42)
     rover_port_combo.grid(row=10, column=1, sticky=tk.W, pady=6)
     rover_port_combo.set(auto_rover_lbl)

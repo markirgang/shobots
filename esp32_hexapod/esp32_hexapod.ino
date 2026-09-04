@@ -204,6 +204,68 @@ int audioVolume = 80; // Default 80% (0 - 100)
 bool audioMuted = false;
 
 // =============================================================================
+// HC-SR04 Ultrasonic Proximity Sensor Configurations (Front, Rear, Left, Right)
+// =============================================================================
+#define FRONT_TRIG_PIN       5
+#define FRONT_ECHO_PIN       6
+#define REAR_TRIG_PIN        17
+#define REAR_ECHO_PIN        18
+#define LEFT_TRIG_PIN        38
+#define LEFT_ECHO_PIN        39
+#define RIGHT_TRIG_PIN       40
+#define RIGHT_ECHO_PIN       45
+
+int hexapodSonarFrontCm = 999;
+int hexapodSonarRearCm  = 999;
+int hexapodSonarLeftCm  = 999;
+int hexapodSonarRightCm = 999;
+unsigned long lastHexapodSonarReadTime = 0;
+unsigned long lastHexapodSonarStreamTime = 0;
+
+int readHexapodHCSR04Distance(int trigPin, int echoPin) {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  
+  long duration = pulseIn(echoPin, HIGH, 25000); // 25ms timeout (~4m max)
+  if (duration == 0) return 400; // max/no echo
+  int distanceCm = (int)(duration * 0.0343f / 2.0f);
+  return constrain(distanceCm, 2, 400);
+}
+
+void updateHexapodSonarSensors() {
+  if (millis() - lastHexapodSonarReadTime > 100) { // Update every 100ms
+    lastHexapodSonarReadTime = millis();
+    hexapodSonarFrontCm = readHexapodHCSR04Distance(FRONT_TRIG_PIN, FRONT_ECHO_PIN);
+    hexapodSonarRearCm  = readHexapodHCSR04Distance(REAR_TRIG_PIN, REAR_ECHO_PIN);
+    hexapodSonarLeftCm  = readHexapodHCSR04Distance(LEFT_TRIG_PIN, LEFT_ECHO_PIN);
+    hexapodSonarRightCm = readHexapodHCSR04Distance(RIGHT_TRIG_PIN, RIGHT_ECHO_PIN);
+  }
+}
+
+void sendHexapodSonarTelemetry() {
+  String telemetry = "SONAR:F:" + String(hexapodSonarFrontCm) +
+                     ":R:" + String(hexapodSonarRearCm) +
+                     ":L:" + String(hexapodSonarLeftCm) +
+                     ":R:" + String(hexapodSonarRightCm);
+  Serial.println(telemetry);
+#if HAS_BT_CLASSIC
+  SerialBT.println(telemetry);
+#endif
+}
+
+void renderTouchLCD7CHexapodSonarHUD() {
+  static unsigned long lastHudLog = 0;
+  if (millis() - lastHudLog > 1000) {
+    lastHudLog = millis();
+    Serial.printf("[Hexapod Waveshare TouchLCD-7C HUD] Sonar -> FRONT: %d cm | REAR: %d cm | LEFT: %d cm | RIGHT: %d cm\n",
+                  hexapodSonarFrontCm, hexapodSonarRearCm, hexapodSonarLeftCm, hexapodSonarRightCm);
+  }
+}
+
+// =============================================================================
 // MAX98357A I2S Mono Audio Synthesis & Playback Engine
 // =============================================================================
 void initI2SAudio() {
@@ -1232,6 +1294,9 @@ void parseCommand(String cmd) {
     handleTouchAction("turn_right");
   } else if (cmd == "HEX:stop" || cmd == "hex:stop") {
     handleTouchAction("stop");
+  } else if (cmd == "SONAR:GET" || cmd == "GET_SONAR" || cmd == "HEX:SONAR") {
+    updateHexapodSonarSensors();
+    sendHexapodSonarTelemetry();
   }
 }
 
@@ -1253,6 +1318,16 @@ void setup() {
   // Initialize I2C Bus on 7-inch Touch LCD pins (SDA=GPIO 8, SCL=GPIO 9)
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000); // 400kHz Fast I2C
+
+  // Pin modes for 4 x HC-SR04 Ultrasonic Proximity Sensors
+  pinMode(FRONT_TRIG_PIN, OUTPUT);
+  pinMode(FRONT_ECHO_PIN, INPUT);
+  pinMode(REAR_TRIG_PIN, OUTPUT);
+  pinMode(REAR_ECHO_PIN, INPUT);
+  pinMode(LEFT_TRIG_PIN, OUTPUT);
+  pinMode(LEFT_ECHO_PIN, INPUT);
+  pinMode(RIGHT_TRIG_PIN, OUTPUT);
+  pinMode(RIGHT_ECHO_PIN, INPUT);
 
   // Initialize Waveshare 7C Onboard IO Expander (CH422G for Backlight, LCD Power & Touch Reset)
   initIOExpander7C();
@@ -1321,6 +1396,16 @@ void loop() {
 
   // 6. Update Real-Time Speech Animatronics & Eye Blinking Engine
   updateSpeechEngine();
+
+  // 7. Update 4 x HC-SR04 Ultrasonic Proximity Sensors & Waveshare TouchLCD-7C Readout
+  updateHexapodSonarSensors();
+  renderTouchLCD7CHexapodSonarHUD();
+
+  // Periodically stream sonar telemetry every 500ms
+  if (millis() - lastHexapodSonarStreamTime > 500) {
+    lastHexapodSonarStreamTime = millis();
+    sendHexapodSonarTelemetry();
+  }
 
   delay(2); // Short loop pause for CPU efficiency
 }

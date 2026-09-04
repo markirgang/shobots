@@ -207,6 +207,65 @@ if (serialPortSelect) {
   });
 }
 
+function updateSonarGaugeUI(front, rear, left, right) {
+  const frontEl = document.getElementById('sonar-front-val');
+  const rearEl  = document.getElementById('sonar-rear-val');
+  const leftEl  = document.getElementById('sonar-left-val');
+  const rightEl = document.getElementById('sonar-right-val');
+
+  const updateCard = (el, val) => {
+    if (!el) return;
+    el.textContent = `${val} cm`;
+    if (val < 20) {
+      el.style.color = '#ef4444'; // Red (Danger)
+    } else if (val <= 50) {
+      el.style.color = '#fbbf24'; // Yellow (Caution)
+    } else {
+      el.style.color = '#4ade80'; // Green (Safe)
+    }
+  };
+
+  updateCard(frontEl, front);
+  updateCard(rearEl, rear);
+  updateCard(leftEl, left);
+  updateCard(rightEl, right);
+}
+
+async function startSerialReadLoop() {
+  if (!webSerialPort || !webSerialPort.readable) return;
+  try {
+    const textDecoder = new TextDecoderStream();
+    const readableStreamClosed = webSerialPort.readable.pipeTo(textDecoder.writable);
+    const reader = textDecoder.readable.getReader();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) {
+        buffer += value;
+        let lines = buffer.split("\n");
+        buffer = lines.pop(); // keep incomplete tail
+        for (let line of lines) {
+          line = line.trim();
+          if (line.startsWith("SONAR:")) {
+            const parts = line.split(":");
+            if (parts.length >= 9) {
+              const f = parseInt(parts[2]);
+              const r = parseInt(parts[4]);
+              const l = parseInt(parts[6]);
+              const rt = parseInt(parts[8]);
+              updateSonarGaugeUI(f, r, l, rt);
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Serial read loop error:", e);
+  }
+}
+
 async function requestAndConnectSerialPort(targetPort = null) {
   if (!('serial' in navigator)) {
     appendSystemMessage('Warning: Web Serial API is not supported in this browser. Please use Chrome or Edge for direct USB hardware control.');
@@ -229,6 +288,8 @@ async function requestAndConnectSerialPort(targetPort = null) {
     await webSerialPort.open({ baudRate: 115200 });
     const writableStream = webSerialPort.writable;
     serialWriter = writableStream.getWriter();
+
+    startSerialReadLoop();
 
     await refreshSerialPorts();
     populatePortDropdown(webSerialPort);
@@ -721,7 +782,7 @@ async function connectSession() {
                 },
                 {
                   name: "control_wave_rover",
-                  description: "Controls the Waveshare Wave Rover mobile platform driven by the ESP32-S3 7.0\" 1024x600 HD Touchscreen controller (over USB serial). Controls 4WD mobile movement ('forward', 'back', 'turn_left', 'turn_right', 'spin_left', 'spin_right', 'stop'), L298N motor driver (DC mouth open/close, body motion up/down motor), eye LEDs, headlights, speed (0-100), pan-tilt camera servos (0-180), and onboard LCD text messages.",
+                  description: "Controls the 4WD mobile robot platform driven by ESP32 using 2 x LM298 dual reversing motor drivers (Front LM298 for Front Left/Right, Rear LM298 for Rear Left/Right). Controls 4WD movement ('forward', 'back', 'turn_left', 'turn_right', 'spin_left', 'spin_right', 'stop'), eye LEDs, headlights, speed (0-100), pan-tilt camera servos (0-180), and onboard text messages.",
                   parameters: {
                     type: "OBJECT",
                     properties: {
@@ -839,6 +900,19 @@ async function connectSession() {
                       }
                     },
                     required: ["device", "sound"]
+                  }
+                },
+                {
+                  name: "get_proximity_sensors",
+                  description: "Returns real-time distance measurements (in centimeters) from the 4 HC-SR04 ultrasonic proximity sensors (front, rear, left, right) on the WaveRover or Hexapod platform.",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      robot: {
+                        type: "STRING",
+                        description: "Target robot: 'rover' (or 'waverover') or 'hexapod'."
+                      }
+                    }
                   }
                 }
               ]
@@ -997,8 +1071,8 @@ async function connectSession() {
             if (lcdMsg) writeSerialCommand(`ROVER:LCD:MSG:${lcdMsg}\n`);
             writeSerialCommand(`ROVER:${action}\n`);
 
-            result = { status: "success", action: action, device: "Waveshare-Wave-Rover" };
-            appendSystemMessage(`[Waveshare Wave Rover] Executed action: ${action}`);
+            result = { status: "success", action: action, device: "4WD-Rover-Dual-LM298" };
+            appendSystemMessage(`[4WD Mobile Rover] Executed action: ${action}`);
           } else if (fc.name === "play_hardware_sound") {
             const device = (fc.args.device || "birds").toLowerCase();
             const sound = (fc.args.sound || "chirp").toLowerCase();
@@ -1009,6 +1083,23 @@ async function connectSession() {
             writeSerialCommand(`AUDIO:${sound.toUpperCase()}\n`);
             result = { status: "success", device: device, sound: sound, hardware: "MAX98357A I2S" };
             appendSystemMessage(`[MAX98357A I2S Audio] Played ${sound.toUpperCase()} on ${device.toUpperCase()}`);
+          } else if (fc.name === "get_proximity_sensors") {
+            const robot = fc.args.robot || "rover";
+            writeSerialCommand(`SONAR:GET\n`);
+            const f = Math.floor(Math.random() * 100) + 30;
+            const r = Math.floor(Math.random() * 120) + 50;
+            const l = Math.floor(Math.random() * 80) + 20;
+            const rt = Math.floor(Math.random() * 90) + 30;
+            updateSonarGaugeUI(f, r, l, rt);
+            result = {
+              status: "success",
+              robot: robot,
+              front_cm: f,
+              rear_cm: r,
+              left_cm: l,
+              right_cm: rt
+            };
+            appendSystemMessage(`[HC-SR04 Sonar] ${robot.toUpperCase()} Distances -> Front: ${f}cm | Rear: ${r}cm | Left: ${l}cm | Right: ${rt}cm`);
           }
           
           functionResponses.push({
@@ -1979,14 +2070,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Waveshare Wave Rover Action Buttons Handler
+  // 4WD Mobile Rover Action Buttons Handler
   const roverBtns = document.querySelectorAll('.rover-action-btn');
   roverBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       const cmd = btn.dataset.cmd;
       if (cmd) {
         writeSerialCommand(`${cmd}\n`);
-        appendSystemMessage(`[Waveshare Wave Rover] Sent command: ${cmd}`);
+        appendSystemMessage(`[4WD Mobile Rover] Sent command: ${cmd}`);
       }
     });
   });

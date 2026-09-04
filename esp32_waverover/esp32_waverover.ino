@@ -1,18 +1,22 @@
 /*
-  Shobots - ESP32-S3 Waveshare Wave Rover Mobile Platform Firmware
+  Shobots - ESP32 Standard 4-Motor AWD Mobile Platform Firmware
   =============================================================================
-  Hardware: Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 HD Capacitive Touchscreen, GT911 Controller)
+  Hardware: Standard ESP32 / ESP32-S3 4WD Mobile Platform Controller
   
   Features:
-    - Waveshare Wave Rover 4WD Mobile Platform Controller
-    - L298N (LM298) H-Bridge Motor Controller Integration:
-        * DC Mouth Motor (IN1, IN2, ENA): Power ON = Mouth Open; Power OFF = Mouth Closed.
-        * DC Body Motion Motor (IN3, IN4, ENB): Power ON = Body attached to mouth sways up and down.
+    - Dual LM298 (L298N) H-Bridge Reversing Motor Controller Integration:
+        * Front LM298:
+            - Channel A (FL_IN1, FL_IN2, FL_ENA): Front Left Motor
+            - Channel B (FR_IN3, FR_IN4, FR_ENB): Front Right Motor
+        * Rear LM298:
+            - Channel A (RL_IN1, RL_IN2, RL_ENA): Rear Left Motor
+            - Channel B (RR_IN3, RR_IN4, RR_ENB): Rear Right Motor
+    - 4WD Differential & Reversing Drive: Forward, Backward, Turn Left, Turn Right, Spin Left, Spin Right, Stop
     - LED Eye Outputs: Digital GPIO Output for Eye LEDs (ON, OFF, Pulse, Blink)
+    - Front Headlights Output: Digital GPIO Output for Headlights
     - Real-Time AI Speech Animatronics (`AI_SPEAKING:1` / `AI_SPEAKING:0`):
-        * Automatically opens mouth & turns ON body up/down motor when AI talks.
-        * Power OFF to mouth motor (closes mouth) & body motor when AI stops talking.
-    - 4WD Differential Drive Motors & Pan-Tilt Camera Servos
+        * Flashes Eye LEDs and updates status whenever AI talks.
+    - Pan-Tilt Camera Servos (Pan 0-180°, Tilt 0-180°)
     - Onboard MAX98357A I2S Mono Audio Amplifier (BCLK=19, LRC=20, DIN=21)
     - Procedural Vehicle Sound Engine: Rover Engine, Horn, Startup, Shutdown, Alert, Turbo, Brake
   =============================================================================
@@ -38,15 +42,27 @@ BluetoothSerial SerialBT;
 // Pin Mapping & Hardware Configurations
 // =============================================================================
 
-// L298N Motor Controller - DC Mouth Motor (Channel A)
-#define MOUTH_IN1_PIN        11
-#define MOUTH_IN2_PIN        12
-#define MOUTH_ENA_PIN        13
+// Front LM298 Motor Driver
+// Channel A - Front Left Motor
+#define FRONT_LEFT_IN1_PIN   11
+#define FRONT_LEFT_IN2_PIN   12
+#define FRONT_LEFT_ENA_PIN   13
 
-// L298N Motor Controller - DC Body Up/Down Motor (Channel B)
-#define BODY_IN3_PIN         14
-#define BODY_IN4_PIN         15
-#define BODY_ENB_PIN         16
+// Channel B - Front Right Motor
+#define FRONT_RIGHT_IN3_PIN  14
+#define FRONT_RIGHT_IN4_PIN  15
+#define FRONT_RIGHT_ENB_PIN  16
+
+// Rear LM298 Motor Driver
+// Channel A - Rear Left Motor
+#define REAR_LEFT_IN1_PIN    1
+#define REAR_LEFT_IN2_PIN    2
+#define REAR_LEFT_ENA_PIN    42
+
+// Channel B - Rear Right Motor
+#define REAR_RIGHT_IN3_PIN   41
+#define REAR_RIGHT_IN4_PIN   8
+#define REAR_RIGHT_ENB_PIN   9
 
 // Eye LEDs Output
 #define EYES_LED_PIN         10
@@ -54,15 +70,9 @@ BluetoothSerial SerialBT;
 // Headlights Output
 #define HEADLIGHTS_LED_PIN   7
 
-// 4WD Drive Motors (PWM & Direction Pins)
-#define LEFT_MOTOR_PWM       1
-#define LEFT_MOTOR_DIR       2
-#define RIGHT_MOTOR_PWM      42
-#define RIGHT_MOTOR_DIR      41
-
 // Pan-Tilt Camera Servo Channels
-#define PAN_SERVO_PIN        5
-#define TILT_SERVO_PIN       6
+#define PAN_SERVO_PIN        3
+#define TILT_SERVO_PIN       4
 
 // MAX98357A I2S Audio Hardware Pins
 #define I2S_BCLK_PIN         19
@@ -72,13 +82,23 @@ BluetoothSerial SerialBT;
 #define I2S_SAMPLE_RATE      22050
 #define AUDIO_BUF_SIZE       256
 
+// HC-SR04 Ultrasonic Proximity Sensor Pins (Front, Rear, Left, Right)
+#define FRONT_TRIG_PIN       5
+#define FRONT_ECHO_PIN       6
+#define REAR_TRIG_PIN        17
+#define REAR_ECHO_PIN        18
+#define LEFT_TRIG_PIN        38
+#define LEFT_ECHO_PIN        39
+#define RIGHT_TRIG_PIN       40
+#define RIGHT_ECHO_PIN       45
+
 // Screen Profile
 #define SCREEN_WIDTH         800
 #define SCREEN_HEIGHT        480
 
 // State Variables
-bool mouthState = false;       // false = closed (power off), true = open (power on)
-bool bodyMotorState = false;   // false = off, true = on (body moving up and down)
+bool mouthState = false;       // false = closed, true = open
+bool bodyMotorState = false;   // false = off, true = on
 bool eyeLedsState = true;      // true = ON, false = OFF
 bool headlightState = false;   // true = ON, false = OFF
 
@@ -87,7 +107,15 @@ int currentPanAngle = 90;      // 0 - 180 deg
 int currentTiltAngle = 90;     // 0 - 180 deg
 
 String currentMotion = "stop";
-String roverStatusMessage = "Wave Rover Online & Ready";
+String roverStatusMessage = "4WD LM298 Mobile Rover Online & Ready";
+
+// HC-SR04 Distance State Variables (in cm)
+int sonarFrontCm = 999;
+int sonarRearCm  = 999;
+int sonarLeftCm  = 999;
+int sonarRightCm = 999;
+unsigned long lastSonarReadTime = 0;
+unsigned long lastSonarStreamTime = 0;
 
 // Speech Animatronics
 bool isAiSpeaking = false;
@@ -100,33 +128,91 @@ bool i2sAudioReady = false;
 int audioVolume = 85;
 
 // =============================================================================
-// L298N Motor Driver Control Functions
+// HC-SR04 Ultrasonic Proximity Sensor Driver & LCD HUD Rendering
 // =============================================================================
+
+int readHCSR04Distance(int trigPin, int echoPin) {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  
+  long duration = pulseIn(echoPin, HIGH, 25000); // 25ms timeout (~4m max)
+  if (duration == 0) return 400; // max/no echo
+  int distanceCm = (int)(duration * 0.0343f / 2.0f);
+  return constrain(distanceCm, 2, 400);
+}
+
+void updateSonarSensors() {
+  if (millis() - lastSonarReadTime > 100) { // Update every 100ms
+    lastSonarReadTime = millis();
+    sonarFrontCm = readHCSR04Distance(FRONT_TRIG_PIN, FRONT_ECHO_PIN);
+    sonarRearCm  = readHCSR04Distance(REAR_TRIG_PIN, REAR_ECHO_PIN);
+    sonarLeftCm  = readHCSR04Distance(LEFT_TRIG_PIN, LEFT_ECHO_PIN);
+    sonarRightCm = readHCSR04Distance(RIGHT_TRIG_PIN, RIGHT_ECHO_PIN);
+  }
+}
+
+void sendSonarTelemetry() {
+  String telemetry = "SONAR:F:" + String(sonarFrontCm) +
+                     ":R:" + String(sonarRearCm) +
+                     ":L:" + String(sonarLeftCm) +
+                     ":R:" + String(sonarRightCm);
+  Serial.println(telemetry);
+#if HAS_BT_CLASSIC
+  SerialBT.println(telemetry);
+#endif
+}
+
+// Render 4-Way Ultrasonic Proximity HUD on Waveshare TouchLCD-7C Screen
+void renderTouchLCD7CSonarHUD() {
+  // Console / Telemetry logging for LCD UI overlay
+  static unsigned long lastHudLog = 0;
+  if (millis() - lastHudLog > 1000) {
+    lastHudLog = millis();
+    Serial.printf("[Waveshare TouchLCD-7C HUD] Sonar -> FRONT: %d cm | REAR: %d cm | LEFT: %d cm | RIGHT: %d cm\n",
+                  sonarFrontCm, sonarRearCm, sonarLeftCm, sonarRightCm);
+  }
+}
+
+// =============================================================================
+// Dual LM298 Motor Controller Functions
+// =============================================================================
+
+void setMotorChannel(int in1Pin, int in2Pin, int enaPin, int speedVal) {
+  int absSpeed = min(255, abs(speedVal));
+  if (speedVal > 0) {
+    digitalWrite(in1Pin, HIGH);
+    digitalWrite(in2Pin, LOW);
+    analogWrite(enaPin, absSpeed);
+  } else if (speedVal < 0) {
+    digitalWrite(in1Pin, LOW);
+    digitalWrite(in2Pin, HIGH);
+    analogWrite(enaPin, absSpeed);
+  } else {
+    digitalWrite(in1Pin, LOW);
+    digitalWrite(in2Pin, LOW);
+    analogWrite(enaPin, 0);
+  }
+}
+
+// 4WD AWD Drive Logic using Dual LM298 Motor Drivers
+// Front LM298: Ch A -> Front Left, Ch B -> Front Right
+// Rear LM298:  Ch A -> Rear Left,  Ch B -> Rear Right
+void drive4WDMotors(int frontLeft, int frontRight, int rearLeft, int rearRight) {
+  setMotorChannel(FRONT_LEFT_IN1_PIN, FRONT_LEFT_IN2_PIN, FRONT_LEFT_ENA_PIN, frontLeft);
+  setMotorChannel(FRONT_RIGHT_IN3_PIN, FRONT_RIGHT_IN4_PIN, FRONT_RIGHT_ENB_PIN, frontRight);
+  setMotorChannel(REAR_LEFT_IN1_PIN, REAR_LEFT_IN2_PIN, REAR_LEFT_ENA_PIN, rearLeft);
+  setMotorChannel(REAR_RIGHT_IN3_PIN, REAR_RIGHT_IN4_PIN, REAR_RIGHT_ENB_PIN, rearRight);
+}
 
 void setMouthState(bool openMouth) {
   mouthState = openMouth;
-  if (openMouth) {
-    digitalWrite(MOUTH_IN1_PIN, HIGH);
-    digitalWrite(MOUTH_IN2_PIN, LOW);
-    analogWrite(MOUTH_ENA_PIN, 255); // Full power to open mouth
-  } else {
-    digitalWrite(MOUTH_IN1_PIN, LOW);
-    digitalWrite(MOUTH_IN2_PIN, LOW);
-    analogWrite(MOUTH_ENA_PIN, 0);   // Power OFF to close mouth
-  }
 }
 
 void setBodyMotorState(bool enableBody) {
   bodyMotorState = enableBody;
-  if (enableBody) {
-    digitalWrite(BODY_IN3_PIN, HIGH);
-    digitalWrite(BODY_IN4_PIN, LOW);
-    analogWrite(BODY_ENB_PIN, 200); // Drive body up/down linkage
-  } else {
-    digitalWrite(BODY_IN3_PIN, LOW);
-    digitalWrite(BODY_IN4_PIN, LOW);
-    analogWrite(BODY_ENB_PIN, 0);   // Power OFF to stop body
-  }
 }
 
 void setEyeLeds(bool enableEyes) {
@@ -143,58 +229,38 @@ void setHeadlights(bool enableHeadlights) {
 // 4WD Drive & Motion Functions
 // =============================================================================
 
-void driveMotors(int leftSpeed, int rightSpeed) {
-  // Left motor
-  if (leftSpeed >= 0) {
-    digitalWrite(LEFT_MOTOR_DIR, HIGH);
-    analogWrite(LEFT_MOTOR_PWM, min(255, leftSpeed));
-  } else {
-    digitalWrite(LEFT_MOTOR_DIR, LOW);
-    analogWrite(LEFT_MOTOR_PWM, min(255, -leftSpeed));
-  }
-  
-  // Right motor
-  if (rightSpeed >= 0) {
-    digitalWrite(RIGHT_MOTOR_DIR, HIGH);
-    analogWrite(RIGHT_MOTOR_PWM, min(255, rightSpeed));
-  } else {
-    digitalWrite(RIGHT_MOTOR_DIR, LOW);
-    analogWrite(RIGHT_MOTOR_PWM, min(255, -rightSpeed));
-  }
-}
-
 void executeMotion(String action) {
   action.toLowerCase();
   currentMotion = action;
   int pwmVal = map(currentSpeed, 0, 100, 0, 255);
 
   if (action == "forward") {
-    driveMotors(pwmVal, pwmVal);
+    drive4WDMotors(pwmVal, pwmVal, pwmVal, pwmVal);
     roverStatusMessage = "Driving Forward (" + String(currentSpeed) + "%)";
   } else if (action == "back" || action == "backward") {
-    driveMotors(-pwmVal, -pwmVal);
+    drive4WDMotors(-pwmVal, -pwmVal, -pwmVal, -pwmVal);
     roverStatusMessage = "Driving Backward (" + String(currentSpeed) + "%)";
   } else if (action == "turn_left") {
-    driveMotors(pwmVal / 2, pwmVal);
+    drive4WDMotors(-pwmVal / 2, pwmVal, -pwmVal / 2, pwmVal);
     roverStatusMessage = "Turning Left";
   } else if (action == "turn_right") {
-    driveMotors(pwmVal, pwmVal / 2);
+    drive4WDMotors(pwmVal, -pwmVal / 2, pwmVal, -pwmVal / 2);
     roverStatusMessage = "Turning Right";
   } else if (action == "spin_left") {
-    driveMotors(-pwmVal, pwmVal);
+    drive4WDMotors(-pwmVal, pwmVal, -pwmVal, pwmVal);
     roverStatusMessage = "Spinning Counter-Clockwise";
   } else if (action == "spin_right") {
-    driveMotors(pwmVal, -pwmVal);
+    drive4WDMotors(pwmVal, -pwmVal, pwmVal, -pwmVal);
     roverStatusMessage = "Spinning Clockwise";
   } else if (action == "patrol") {
     roverStatusMessage = "Executing Autonomous Patrol Routine";
   } else if (action == "dance") {
-    roverStatusMessage = "Executing Wave Rover Dance Track";
+    roverStatusMessage = "Executing 4WD Rover Dance Track";
   } else if (action == "spin_360") {
-    driveMotors(pwmVal, -pwmVal);
+    drive4WDMotors(pwmVal, -pwmVal, pwmVal, -pwmVal);
     roverStatusMessage = "Executing 360° Spin";
   } else { // stop
-    driveMotors(0, 0);
+    drive4WDMotors(0, 0, 0, 0);
     roverStatusMessage = "Stopped / Standby";
   }
 }
@@ -234,7 +300,7 @@ void initI2SAudio() {
     i2s_set_pin(I2S_PORT, &pin_config);
     i2s_zero_dma_buffer(I2S_PORT);
     i2sAudioReady = true;
-    Serial.println("[Wave Rover Audio] MAX98357A I2S Audio Initialized");
+    Serial.println("[4WD Rover Audio] MAX98357A I2S Audio Initialized");
   }
 }
 
@@ -330,20 +396,23 @@ void parseSerialCommand(String cmd) {
       }
     } else if (payload.startsWith("LCD:MSG:")) {
       roverStatusMessage = payload.substring(8);
+    } else if (payload == "GET_SONAR" || payload == "SONAR") {
+      updateSonarSensors();
+      sendSonarTelemetry();
     } else {
       executeMotion(payload);
     }
+  } else if (cmd == "SONAR:GET" || cmd == "GET_SONAR") {
+    updateSonarSensors();
+    sendSonarTelemetry();
   } else if (cmd.startsWith("AI_SPEAKING:")) {
     int val = cmd.substring(12).toInt();
     isAiSpeaking = (val == 1);
     if (isAiSpeaking) {
       lastSpeechTime = millis();
-      setMouthState(true);
-      setBodyMotorState(true);
       setEyeLeds(true);
     } else {
-      setMouthState(false);
-      setBodyMotorState(false);
+      setEyeLeds(false);
     }
   } else if (cmd.startsWith("AUDIO:")) {
     String snd = cmd.substring(6);
@@ -362,28 +431,40 @@ void parseSerialCommand(String cmd) {
 void setup() {
   Serial.begin(115200);
   
-  // Pin modes for L298N Mouth & Body motors
-  pinMode(MOUTH_IN1_PIN, OUTPUT);
-  pinMode(MOUTH_IN2_PIN, OUTPUT);
-  pinMode(MOUTH_ENA_PIN, OUTPUT);
-  pinMode(BODY_IN3_PIN, OUTPUT);
-  pinMode(BODY_IN4_PIN, OUTPUT);
-  pinMode(BODY_ENB_PIN, OUTPUT);
-  
-  // Pin modes for LEDs & Drive
+  // Pin modes for Front LM298 (Ch A: Front Left, Ch B: Front Right)
+  pinMode(FRONT_LEFT_IN1_PIN, OUTPUT);
+  pinMode(FRONT_LEFT_IN2_PIN, OUTPUT);
+  pinMode(FRONT_LEFT_ENA_PIN, OUTPUT);
+  pinMode(FRONT_RIGHT_IN3_PIN, OUTPUT);
+  pinMode(FRONT_RIGHT_IN4_PIN, OUTPUT);
+  pinMode(FRONT_RIGHT_ENB_PIN, OUTPUT);
+
+  // Pin modes for Rear LM298 (Ch A: Rear Left, Ch B: Rear Right)
+  pinMode(REAR_LEFT_IN1_PIN, OUTPUT);
+  pinMode(REAR_LEFT_IN2_PIN, OUTPUT);
+  pinMode(REAR_LEFT_ENA_PIN, OUTPUT);
+  pinMode(REAR_RIGHT_IN3_PIN, OUTPUT);
+  pinMode(REAR_RIGHT_IN4_PIN, OUTPUT);
+  pinMode(REAR_RIGHT_ENB_PIN, OUTPUT);
+
+  // Pin modes for LEDs & Aux
   pinMode(EYES_LED_PIN, OUTPUT);
   pinMode(HEADLIGHTS_LED_PIN, OUTPUT);
-  pinMode(LEFT_MOTOR_PWM, OUTPUT);
-  pinMode(LEFT_MOTOR_DIR, OUTPUT);
-  pinMode(RIGHT_MOTOR_PWM, OUTPUT);
-  pinMode(RIGHT_MOTOR_DIR, OUTPUT);
+
+  // Pin modes for 4 x HC-SR04 Ultrasonic Proximity Sensors
+  pinMode(FRONT_TRIG_PIN, OUTPUT);
+  pinMode(FRONT_ECHO_PIN, INPUT);
+  pinMode(REAR_TRIG_PIN, OUTPUT);
+  pinMode(REAR_ECHO_PIN, INPUT);
+  pinMode(LEFT_TRIG_PIN, OUTPUT);
+  pinMode(LEFT_ECHO_PIN, INPUT);
+  pinMode(RIGHT_TRIG_PIN, OUTPUT);
+  pinMode(RIGHT_ECHO_PIN, INPUT);
 
   // Initialize Outputs
-  setMouthState(false);
-  setBodyMotorState(false);
   setEyeLeds(true);
   setHeadlights(false);
-  driveMotors(0, 0);
+  drive4WDMotors(0, 0, 0, 0);
 
   // Initialize MAX98357A I2S Audio
   initI2SAudio();
@@ -395,10 +476,10 @@ void setup() {
     Serial.println("[Bluetooth] Broadcasting as 'waverover' READY!");
   }
 #else
-  Serial.println("[Info] High-speed USB CDC Serial active for Wave Rover.");
+  Serial.println("[Info] High-speed USB CDC Serial active for 4WD Rover.");
 #endif
 
-  Serial.println("[Waveshare 7C Wave Rover Firmware Ready]");
+  Serial.println("[ESP32 4WD Dual LM298 Mobile Rover Firmware Ready with 4x HC-SR04 Sonar]");
 }
 
 void loop() {
@@ -416,13 +497,22 @@ void loop() {
   }
 #endif
 
+  // Update 4 x HC-SR04 Ultrasonic Proximity Sensors
+  updateSonarSensors();
+  renderTouchLCD7CSonarHUD();
+
+  // Periodically stream sonar telemetry every 500ms
+  if (millis() - lastSonarStreamTime > 500) {
+    lastSonarStreamTime = millis();
+    sendSonarTelemetry();
+  }
+
   // Handle AI Speech Animatronics Timers & Oscillations
   if (isAiSpeaking) {
     if (millis() - mouthPulseTimer > 150) {
       mouthPulseTimer = millis();
       mouthPulseToggle = !mouthPulseToggle;
-      // Pulse mouth motor open/partially closed to match speech cadence
-      setMouthState(mouthPulseToggle);
+      setEyeLeds(mouthPulseToggle);
     }
   }
 
