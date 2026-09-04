@@ -79,6 +79,8 @@ The mobile platform uses two LM298 dual motor drivers to power all 4 wheels inde
 | Command Format | Example | Description |
 | :--- | :--- | :--- |
 | `ROVER:<action>` | `ROVER:forward` / `ROVER:stop` | Rover motion (`forward`, `back`, `turn_left`, `turn_right`, `spin_left`, `spin_right`, `stop`, `patrol`, `spin_360`, `dance`, `obstacle_avoidance`) |
+| `ROVER:OBSTACLE_AVOID:<1\|0>` | `ROVER:OBSTACLE_AVOID:1` | Enables (`1`) or disables (`0`) automatic 4-way ultrasonic obstacle detection and evasion |
+| `ROVER:OBSTACLE_THRESH:<cm>` | `ROVER:OBSTACLE_THRESH:20` | Sets obstacle evasion proximity threshold distance in centimeters (default: 20 cm) |
 | `ROVER:EYES:<1\|0>` | `ROVER:EYES:1` | Eye LEDs Output: `1` = Power ON, `0` = Power OFF |
 | `ROVER:SPEED:<0-100>` | `ROVER:SPEED:80` | Sets 4WD drive motor speed percentage |
 | `ROVER:PANTILT:<pan>:<tilt>` | `ROVER:PANTILT:90:45` | Sets Pan-Tilt camera servo angles in degrees |

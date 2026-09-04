@@ -726,13 +726,13 @@ async function connectSession() {
                 },
                 {
                   name: "control_hexapod",
-                  description: "Controls the 6-leg Hexapod robot driven by the Waveshare ESP32-S3-Touch-LCD-7C controller (over Bluetooth 'hexapod-touch-7c' or USB serial). Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message'. Can also adjust leg joints or display custom text on the onboard 800x600 HD Touch LCD.",
+                  description: "Controls the 6-leg Hexapod robot driven by the Waveshare ESP32-S3-Touch-LCD-7C controller (over Bluetooth 'hexapod-touch-7c' or USB serial). Supported motion presets: 'walk', 'back', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message', 'obstacle_avoidance'. Can also adjust leg joints or display custom text on the onboard 800x600 HD Touch LCD.",
                   parameters: {
                     type: "OBJECT",
                     properties: {
                       action: {
                         type: "STRING",
-                        description: "Motion preset or action: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_joint', 'set_ik', 'set_lcd_message'."
+                        description: "Motion preset or action: 'walk', 'back', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_joint', 'set_ik', 'set_lcd_message', 'obstacle_avoidance'."
                       },
                       leg_name: {
                         type: "STRING",
@@ -1091,13 +1091,26 @@ async function connectSession() {
             const l = Math.floor(Math.random() * 80) + 20;
             const rt = Math.floor(Math.random() * 90) + 30;
             updateSonarGaugeUI(f, r, l, rt);
+            
+            let evasionAction = "none";
+            const minDistance = Math.min(f, r, l, rt);
+            if (minDistance < 20) {
+              if (minDistance === f) evasionAction = "evade_back";
+              else if (minDistance === r) evasionAction = "evade_forward";
+              else if (minDistance === l) evasionAction = "evade_spin_right";
+              else if (minDistance === rt) evasionAction = "evade_spin_left";
+              appendSystemMessage(`[HC-SR04 Sonar Alert] Obstruction detected at ${minDistance}cm! ${robot.toUpperCase()} executing automatic retreat maneuver (${evasionAction}).`);
+            }
+
             result = {
               status: "success",
               robot: robot,
               front_cm: f,
               rear_cm: r,
               left_cm: l,
-              right_cm: rt
+              right_cm: rt,
+              obstacle_avoidance: minDistance < 20 ? "triggered" : "clear",
+              evasion_action: evasionAction
             };
             appendSystemMessage(`[HC-SR04 Sonar] ${robot.toUpperCase()} Distances -> Front: ${f}cm | Rear: ${r}cm | Left: ${l}cm | Right: ${rt}cm`);
           }

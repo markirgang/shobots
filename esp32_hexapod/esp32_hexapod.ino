@@ -222,6 +222,13 @@ int hexapodSonarRightCm = 999;
 unsigned long lastHexapodSonarReadTime = 0;
 unsigned long lastHexapodSonarStreamTime = 0;
 
+// Automatic Obstacle Detection & Evasion Engine Settings
+bool hexapodObstacleAvoidEnabled = true;
+int hexapodObstacleThresholdCm = 20; // 20 cm proximity threshold
+unsigned long lastHexapodObstacleEvadeTime = 0;
+const unsigned long HEXAPOD_OBSTACLE_EVADE_DURATION_MS = 1500;
+bool isHexapodEvadingObstacle = false;
+
 int readHexapodHCSR04Distance(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
@@ -242,6 +249,68 @@ void updateHexapodSonarSensors() {
     hexapodSonarRearCm  = readHexapodHCSR04Distance(REAR_TRIG_PIN, REAR_ECHO_PIN);
     hexapodSonarLeftCm  = readHexapodHCSR04Distance(LEFT_TRIG_PIN, LEFT_ECHO_PIN);
     hexapodSonarRightCm = readHexapodHCSR04Distance(RIGHT_TRIG_PIN, RIGHT_ECHO_PIN);
+  }
+}
+
+void checkHexapodObstacleAvoidance() {
+  if (!hexapodObstacleAvoidEnabled) return;
+
+  int f  = (hexapodSonarFrontCm > 0 && hexapodSonarFrontCm < 400) ? hexapodSonarFrontCm : 999;
+  int r  = (hexapodSonarRearCm > 0 && hexapodSonarRearCm < 400) ? hexapodSonarRearCm : 999;
+  int l  = (hexapodSonarLeftCm > 0 && hexapodSonarLeftCm < 400) ? hexapodSonarLeftCm : 999;
+  int rt = (hexapodSonarRightCm > 0 && hexapodSonarRightCm < 400) ? hexapodSonarRightCm : 999;
+
+  int minDist = min(min(f, r), min(l, rt));
+
+  if (minDist < hexapodObstacleThresholdCm) {
+    lastHexapodObstacleEvadeTime = millis();
+    isHexapodEvadingObstacle = true;
+
+    if (minDist == f) {
+      if (currentGait != "back") {
+        currentGait = "back";
+        gaitStepIndex = 0;
+        lastActionName = "EVADE BACK";
+        lcdStatusMessage = "Obstruction FRONT (" + String(f) + "cm) - Moving Back!";
+        Serial.println("[Hexapod Avoidance] Front obstacle triggered! Stepping backward.");
+        playAlertSound();
+      }
+    } else if (minDist == r) {
+      if (currentGait != "walk") {
+        currentGait = "walk";
+        gaitStepIndex = 0;
+        lastActionName = "EVADE FWD";
+        lcdStatusMessage = "Obstruction REAR (" + String(r) + "cm) - Moving Forward!";
+        Serial.println("[Hexapod Avoidance] Rear obstacle triggered! Stepping forward.");
+        playAlertSound();
+      }
+    } else if (minDist == l) {
+      if (currentGait != "turn_right") {
+        currentGait = "turn_right";
+        gaitStepIndex = 0;
+        lastActionName = "EVADE RIGHT";
+        lcdStatusMessage = "Obstruction LEFT (" + String(l) + "cm) - Turning Right!";
+        Serial.println("[Hexapod Avoidance] Left obstacle triggered! Turning right.");
+        playAlertSound();
+      }
+    } else if (minDist == rt) {
+      if (currentGait != "turn_left") {
+        currentGait = "turn_left";
+        gaitStepIndex = 0;
+        lastActionName = "EVADE LEFT";
+        lcdStatusMessage = "Obstruction RIGHT (" + String(rt) + "cm) - Turning Left!";
+        Serial.println("[Hexapod Avoidance] Right obstacle triggered! Turning left.");
+        playAlertSound();
+      }
+    }
+  } else if (isHexapodEvadingObstacle) {
+    if (millis() - lastHexapodObstacleEvadeTime > HEXAPOD_OBSTACLE_EVADE_DURATION_MS) {
+      isHexapodEvadingObstacle = false;
+      currentGait = "idle";
+      lastActionName = "STAND";
+      lcdStatusMessage = "Obstacle Cleared - Standing Upright";
+      Serial.println("[Hexapod Avoidance] Obstacle cleared. Returning to stand posture.");
+    }
   }
 }
 
@@ -658,7 +727,7 @@ void updateGaitEngine() {
   if (currentGait == "idle" || currentGait == "stop") return;
   if (isMoving) return;
 
-  if (currentGait == "walk" || currentGait == "run") {
+  if (currentGait == "walk" || currentGait == "run" || currentGait == "back") {
     int stepDuration = (currentGait == "run") ? 120 : 220;
     
     // Group A: FL (0), MR (4), RL (2)
@@ -666,17 +735,20 @@ void updateGaitEngine() {
     float targets[TOTAL_SERVOS];
     memcpy(targets, targetAngles, sizeof(targets));
     
+    float fwdAngle = (currentGait == "back") ? 60.0f : 120.0f;
+    float revAngle = (currentGait == "back") ? 120.0f : 60.0f;
+
     if (gaitStepIndex == 0) {
       targets[getServoIndex(0, 1)] = 120.0f;
       targets[getServoIndex(4, 1)] = 120.0f;
       targets[getServoIndex(2, 1)] = 120.0f;
-      targets[getServoIndex(0, 0)] = 120.0f;
-      targets[getServoIndex(4, 0)] = 120.0f;
-      targets[getServoIndex(2, 0)] = 120.0f;
+      targets[getServoIndex(0, 0)] = fwdAngle;
+      targets[getServoIndex(4, 0)] = fwdAngle;
+      targets[getServoIndex(2, 0)] = fwdAngle;
       
-      targets[getServoIndex(3, 0)] = 60.0f;
-      targets[getServoIndex(1, 0)] = 60.0f;
-      targets[getServoIndex(5, 0)] = 60.0f;
+      targets[getServoIndex(3, 0)] = revAngle;
+      targets[getServoIndex(1, 0)] = revAngle;
+      targets[getServoIndex(5, 0)] = revAngle;
       gaitStepIndex = 1;
       playStepSound();
     } else if (gaitStepIndex == 1) {
@@ -688,13 +760,59 @@ void updateGaitEngine() {
       targets[getServoIndex(3, 1)] = 120.0f;
       targets[getServoIndex(1, 1)] = 120.0f;
       targets[getServoIndex(5, 1)] = 120.0f;
-      targets[getServoIndex(3, 0)] = 120.0f;
-      targets[getServoIndex(1, 0)] = 120.0f;
-      targets[getServoIndex(5, 0)] = 120.0f;
+      targets[getServoIndex(3, 0)] = fwdAngle;
+      targets[getServoIndex(1, 0)] = fwdAngle;
+      targets[getServoIndex(5, 0)] = fwdAngle;
       
-      targets[getServoIndex(0, 0)] = 60.0f;
-      targets[getServoIndex(4, 0)] = 60.0f;
-      targets[getServoIndex(2, 0)] = 60.0f;
+      targets[getServoIndex(0, 0)] = revAngle;
+      targets[getServoIndex(4, 0)] = revAngle;
+      targets[getServoIndex(2, 0)] = revAngle;
+      gaitStepIndex = 3;
+      playStepSound();
+    } else {
+      targets[getServoIndex(3, 1)] = 90.0f;
+      targets[getServoIndex(1, 1)] = 90.0f;
+      targets[getServoIndex(5, 1)] = 90.0f;
+      gaitStepIndex = 0;
+    }
+    setTargetAngles(targets, stepDuration);
+  }
+  else if (currentGait == "turn_left" || currentGait == "turn_right") {
+    int stepDuration = 220;
+    float targets[TOTAL_SERVOS];
+    memcpy(targets, targetAngles, sizeof(targets));
+
+    bool isTurnLeft = (currentGait == "turn_left");
+    float groupACoxa = isTurnLeft ? 60.0f : 120.0f;
+    float groupBCoxa = isTurnLeft ? 120.0f : 60.0f;
+
+    if (gaitStepIndex == 0) {
+      targets[getServoIndex(0, 1)] = 120.0f;
+      targets[getServoIndex(4, 1)] = 120.0f;
+      targets[getServoIndex(2, 1)] = 120.0f;
+      targets[getServoIndex(0, 0)] = groupACoxa;
+      targets[getServoIndex(4, 0)] = groupACoxa;
+      targets[getServoIndex(2, 0)] = groupACoxa;
+      targets[getServoIndex(3, 0)] = groupBCoxa;
+      targets[getServoIndex(1, 0)] = groupBCoxa;
+      targets[getServoIndex(5, 0)] = groupBCoxa;
+      gaitStepIndex = 1;
+      playStepSound();
+    } else if (gaitStepIndex == 1) {
+      targets[getServoIndex(0, 1)] = 90.0f;
+      targets[getServoIndex(4, 1)] = 90.0f;
+      targets[getServoIndex(2, 1)] = 90.0f;
+      gaitStepIndex = 2;
+    } else if (gaitStepIndex == 2) {
+      targets[getServoIndex(3, 1)] = 120.0f;
+      targets[getServoIndex(1, 1)] = 120.0f;
+      targets[getServoIndex(5, 1)] = 120.0f;
+      targets[getServoIndex(3, 0)] = groupACoxa;
+      targets[getServoIndex(1, 0)] = groupACoxa;
+      targets[getServoIndex(5, 0)] = groupACoxa;
+      targets[getServoIndex(0, 0)] = groupBCoxa;
+      targets[getServoIndex(4, 0)] = groupBCoxa;
+      targets[getServoIndex(2, 0)] = groupBCoxa;
       gaitStepIndex = 3;
       playStepSound();
     } else {
@@ -990,11 +1108,20 @@ void handleTouchAction(String action) {
     applyWavePosture(false);
     playServoWhineSound();
   } else if (action == "turn_left") {
+    currentGait = "turn_left";
     lastActionName = "TURN L";
     lcdStatusMessage = "Turning Left";
+    gaitStepIndex = 0;
   } else if (action == "turn_right") {
+    currentGait = "turn_right";
     lastActionName = "TURN R";
     lcdStatusMessage = "Turning Right";
+    gaitStepIndex = 0;
+  } else if (action == "back" || action == "backward") {
+    currentGait = "back";
+    lastActionName = "WALK BACK";
+    lcdStatusMessage = "Gait: Walk Backward";
+    gaitStepIndex = 0;
   } else if (action == "speed_up") {
     if (moveDurationMs > 50) moveDurationMs -= 30;
     lcdStatusMessage = "Speed: " + String(moveDurationMs) + "ms";
@@ -1269,6 +1396,27 @@ void parseCommand(String cmd) {
     return;
   }
 
+  if (cmd.startsWith("HEX:OBSTACLE_AVOID:") || cmd.startsWith("hex:obstacle_avoid:")) {
+    int colonIdx = cmd.lastIndexOf(':');
+    String valStr = cmd.substring(colonIdx + 1);
+    valStr.toUpperCase();
+    valStr.trim();
+    hexapodObstacleAvoidEnabled = (valStr == "1" || valStr == "ON" || valStr == "TRUE" || valStr == "ENABLE");
+    lcdStatusMessage = hexapodObstacleAvoidEnabled ? "Auto Avoidance: ENABLED" : "Auto Avoidance: DISABLED";
+    Serial.println("[Hexapod] Obstacle Avoidance set to: " + String(hexapodObstacleAvoidEnabled ? "ON" : "OFF"));
+    return;
+  }
+  if (cmd.startsWith("HEX:OBSTACLE_THRESH:") || cmd.startsWith("hex:obstacle_thresh:")) {
+    int colonIdx = cmd.lastIndexOf(':');
+    if (colonIdx != -1) {
+      hexapodObstacleThresholdCm = cmd.substring(colonIdx + 1).toInt();
+      if (hexapodObstacleThresholdCm < 5) hexapodObstacleThresholdCm = 5;
+      lcdStatusMessage = "Avoid Thresh: " + String(hexapodObstacleThresholdCm) + "cm";
+      Serial.println("[Hexapod] Obstacle Threshold set to " + String(hexapodObstacleThresholdCm) + " cm");
+    }
+    return;
+  }
+
   // 6. Action & Gait Commands
   if (cmd == "HEX:stand" || cmd == "hex:stand") {
     handleTouchAction("stand");
@@ -1278,6 +1426,8 @@ void parseCommand(String cmd) {
     handleTouchAction("flat");
   } else if (cmd == "HEX:walk" || cmd == "hex:walk") {
     handleTouchAction("walk");
+  } else if (cmd == "HEX:back" || cmd == "hex:back" || cmd == "HEX:backward" || cmd == "hex:backward") {
+    handleTouchAction("back");
   } else if (cmd == "HEX:run" || cmd == "hex:run") {
     handleTouchAction("run");
   } else if (cmd == "HEX:dance" || cmd == "hex:dance") {
@@ -1399,6 +1549,7 @@ void loop() {
 
   // 7. Update 4 x HC-SR04 Ultrasonic Proximity Sensors & Waveshare TouchLCD-7C Readout
   updateHexapodSonarSensors();
+  checkHexapodObstacleAvoidance();
   renderTouchLCD7CHexapodSonarHUD();
 
   // Periodically stream sonar telemetry every 500ms

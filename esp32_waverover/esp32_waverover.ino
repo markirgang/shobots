@@ -154,6 +154,59 @@ void updateSonarSensors() {
   }
 }
 
+void checkRoverObstacleAvoidance() {
+  if (!roverObstacleAvoidEnabled) return;
+
+  int f  = (sonarFrontCm > 0 && sonarFrontCm < 400) ? sonarFrontCm : 999;
+  int r  = (sonarRearCm > 0 && sonarRearCm < 400) ? sonarRearCm : 999;
+  int l  = (sonarLeftCm > 0 && sonarLeftCm < 400) ? sonarLeftCm : 999;
+  int rt = (sonarRightCm > 0 && sonarRightCm < 400) ? sonarRightCm : 999;
+
+  int minDist = min(min(f, r), min(l, rt));
+
+  if (minDist < roverObstacleThresholdCm) {
+    lastRoverObstacleEvadeTime = millis();
+    isRoverEvadingObstacle = true;
+
+    if (minDist == f) {
+      if (currentMotion != "back") {
+        executeMotion("back");
+        roverStatusMessage = "Obstruction FRONT (" + String(f) + "cm) - Reversing!";
+        Serial.println("[Rover Avoidance] Front obstacle triggered! Reversing motors.");
+        playHardwareSound("ALERT");
+      }
+    } else if (minDist == r) {
+      if (currentMotion != "forward") {
+        executeMotion("forward");
+        roverStatusMessage = "Obstruction REAR (" + String(r) + "cm) - Driving Forward!";
+        Serial.println("[Rover Avoidance] Rear obstacle triggered! Driving forward.");
+        playHardwareSound("ALERT");
+      }
+    } else if (minDist == l) {
+      if (currentMotion != "spin_right") {
+        executeMotion("spin_right");
+        roverStatusMessage = "Obstruction LEFT (" + String(l) + "cm) - Spinning Right!";
+        Serial.println("[Rover Avoidance] Left obstacle triggered! Spinning right.");
+        playHardwareSound("ALERT");
+      }
+    } else if (minDist == rt) {
+      if (currentMotion != "spin_left") {
+        executeMotion("spin_left");
+        roverStatusMessage = "Obstruction RIGHT (" + String(rt) + "cm) - Spinning Left!";
+        Serial.println("[Rover Avoidance] Right obstacle triggered! Spinning left.");
+        playHardwareSound("ALERT");
+      }
+    }
+  } else if (isRoverEvadingObstacle) {
+    if (millis() - lastRoverObstacleEvadeTime > ROVER_OBSTACLE_EVADE_DURATION_MS) {
+      isRoverEvadingObstacle = false;
+      executeMotion("stop");
+      roverStatusMessage = "Obstacle Cleared - Stopped / Standby";
+      Serial.println("[Rover Avoidance] Obstacle cleared. Stopping motors.");
+    }
+  }
+}
+
 void sendSonarTelemetry() {
   String telemetry = "SONAR:F:" + String(sonarFrontCm) +
                      ":R:" + String(sonarRearCm) +
@@ -394,6 +447,18 @@ void parseSerialCommand(String cmd) {
         int tilt = payload.substring(firstColon + 1).toInt();
         setPanTilt(pan, tilt);
       }
+    } else if (payload.startsWith("OBSTACLE_AVOID:")) {
+      String valStr = payload.substring(15);
+      valStr.toUpperCase();
+      valStr.trim();
+      roverObstacleAvoidEnabled = (valStr == "1" || valStr == "ON" || valStr == "TRUE" || valStr == "ENABLE");
+      roverStatusMessage = roverObstacleAvoidEnabled ? "Auto Avoidance: ENABLED" : "Auto Avoidance: DISABLED";
+      Serial.println("[Rover] Obstacle Avoidance set to: " + String(roverObstacleAvoidEnabled ? "ON" : "OFF"));
+    } else if (payload.startsWith("OBSTACLE_THRESH:")) {
+      roverObstacleThresholdCm = payload.substring(16).toInt();
+      if (roverObstacleThresholdCm < 5) roverObstacleThresholdCm = 5;
+      roverStatusMessage = "Avoid Thresh: " + String(roverObstacleThresholdCm) + "cm";
+      Serial.println("[Rover] Obstacle Threshold set to " + String(roverObstacleThresholdCm) + " cm");
     } else if (payload.startsWith("LCD:MSG:")) {
       roverStatusMessage = payload.substring(8);
     } else if (payload == "GET_SONAR" || payload == "SONAR") {
@@ -499,6 +564,7 @@ void loop() {
 
   // Update 4 x HC-SR04 Ultrasonic Proximity Sensors
   updateSonarSensors();
+  checkRoverObstacleAvoidance();
   renderTouchLCD7CSonarHUD();
 
   // Periodically stream sonar telemetry every 500ms

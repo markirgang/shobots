@@ -124,7 +124,9 @@ The **Waveshare ESP32-S3-Touch-LCD-7C** includes **built-in onboard audio hardwa
 
 | Command Format | Example | Description |
 | :--- | :--- | :--- |
-| `HEX:<action>` | `HEX:walk` / `HEX:stand` | Postures and gaits (`stand`, `sit`, `flat`, `bow`, `walk`, `run`, `dance`, `wave_left`, `wave_right`, `turn_left`, `turn_right`, `stop`) |
+| `HEX:<action>` | `HEX:walk` / `HEX:back` | Postures and gaits (`stand`, `sit`, `flat`, `bow`, `walk`, `back`, `run`, `dance`, `wave_left`, `wave_right`, `turn_left`, `turn_right`, `stop`) |
+| `HEX:OBSTACLE_AVOID:<1|0>` | `HEX:OBSTACLE_AVOID:1` | Enables (`1`) or disables (`0`) automatic 4-way ultrasonic obstacle detection and evasion |
+| `HEX:OBSTACLE_THRESH:<cm>` | `HEX:OBSTACLE_THRESH:20` | Sets obstacle evasion proximity threshold distance in centimeters (default: 20 cm) |
 | `HEX:SERVO:<d>:<ch>:<deg>` | `HEX:SERVO:1:0:90` | Direct servo positioning on Driver `d` (1 or 2), Channel `ch` (0..8) |
 | `HEX:IK:<leg>:<X>:<Y>:<Z>:<ms>` | `HEX:IK:FL:0:80:-60:200` | 3D Inverse Kinematics coordinate target for leg (`FL`, `ML`, `RL`, `FR`, `MR`, `RR`) |
 | `HEX:SPEED:<ms>` | `HEX:SPEED:150` | Sets interpolation transition duration in ms |

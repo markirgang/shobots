@@ -1256,6 +1256,8 @@ class HexapodController:
         self.motion_thread = None
         self.stop_motion_flag = False
         self.sonar_distances = {"front": 50, "rear": 110, "left": 35, "right": 90}
+        self.obstacle_avoidance_enabled = True
+        self.obstacle_threshold_cm = 20
         self.gui_window = None
 
     def parse_sonar_telemetry(self, line: str):
@@ -1268,8 +1270,36 @@ class HexapodController:
                     self.sonar_distances["rear"] = int(parts[4])
                     self.sonar_distances["left"] = int(parts[6])
                     self.sonar_distances["right"] = int(parts[8])
+                    self.check_obstacle_avoidance()
             except Exception:
                 pass
+
+    def check_obstacle_avoidance(self):
+        if not self.obstacle_avoidance_enabled:
+            return
+        distances = self.sonar_distances
+        f = distances.get("front", 999)
+        r = distances.get("rear", 999)
+        l = distances.get("left", 999)
+        rt = distances.get("right", 999)
+
+        valid_dists = {side: d for side, d in [("front", f), ("rear", r), ("left", l), ("right", rt)] if 0 < d < 400}
+        if not valid_dists:
+            return
+
+        min_side = min(valid_dists, key=valid_dists.get)
+        min_dist = valid_dists[min_side]
+
+        if min_dist < self.obstacle_threshold_cm:
+            print(f"[Hexapod Obstacle Avoidance] {min_side.upper()} obstacle detected ({min_dist} cm < {self.obstacle_threshold_cm} cm)!")
+            if min_side == "front":
+                self.execute_action("back")
+            elif min_side == "rear":
+                self.execute_action("walk")
+            elif min_side == "left":
+                self.execute_action("turn_right")
+            elif min_side == "right":
+                self.execute_action("turn_left")
 
     def get_sonar_distances(self) -> dict:
         if self.simulated:
@@ -1399,12 +1429,14 @@ class HexapodController:
             self.send_bt_command(f"HEX:{action}\r\n")
             return {"status": "success", "action": action, "message": msg}
 
-        elif action in ("walk", "run", "wave_left_arm", "wave_right_arm", "dance", "turn_left", "turn_right", "bow"):
+        elif action in ("walk", "back", "backward", "walk_back", "run", "wave_left_arm", "wave_right_arm", "dance", "turn_left", "turn_right", "bow"):
             self.current_motion = action
             import threading
             self.stop_motion_flag = False
 
-            if action == "walk":
+            action_cmd = "back" if action in ("back", "backward", "walk_back") else action
+
+            if action in ("back", "backward", "walk_back") or action == "walk":
                 target_func = self._loop_walk
             elif action == "run":
                 target_func = self._loop_run
@@ -1423,8 +1455,8 @@ class HexapodController:
 
             self.motion_thread = threading.Thread(target=target_func, daemon=True)
             self.motion_thread.start()
-            self.send_bt_command(f"HEX:{action}\r\n")
-            return {"status": "success", "action": action, "message": f"Executing motion '{action_name}' on Hexapod"}
+            self.send_bt_command(f"HEX:{action_cmd}\r\n")
+            return {"status": "success", "action": action_cmd, "message": f"Executing motion '{action_name}' on Hexapod"}
 
         elif action == "stop":
             self.current_motion = "idle"
@@ -1869,6 +1901,8 @@ class WaveRoverController:
         self.tilt_angle = 90           # 0 - 180 deg
         self.current_motion = "idle"
         self.sonar_distances = {"front": 45, "rear": 120, "left": 30, "right": 85}
+        self.obstacle_avoidance_enabled = True
+        self.obstacle_threshold_cm = 20
         self.gui_window = None
 
     def parse_sonar_telemetry(self, line: str):
@@ -1881,8 +1915,36 @@ class WaveRoverController:
                     self.sonar_distances["rear"] = int(parts[4])
                     self.sonar_distances["left"] = int(parts[6])
                     self.sonar_distances["right"] = int(parts[8])
+                    self.check_obstacle_avoidance()
             except Exception:
                 pass
+
+    def check_obstacle_avoidance(self):
+        if not self.obstacle_avoidance_enabled:
+            return
+        distances = self.sonar_distances
+        f = distances.get("front", 999)
+        r = distances.get("rear", 999)
+        l = distances.get("left", 999)
+        rt = distances.get("right", 999)
+
+        valid_dists = {side: d for side, d in [("front", f), ("rear", r), ("left", l), ("right", rt)] if 0 < d < 400}
+        if not valid_dists:
+            return
+
+        min_side = min(valid_dists, key=valid_dists.get)
+        min_dist = valid_dists[min_side]
+
+        if min_dist < self.obstacle_threshold_cm:
+            print(f"[WaveRover Obstacle Avoidance] {min_side.upper()} obstacle detected ({min_dist} cm < {self.obstacle_threshold_cm} cm)!")
+            if min_side == "front":
+                self.execute_action("back")
+            elif min_side == "rear":
+                self.execute_action("forward")
+            elif min_side == "left":
+                self.execute_action("spin_right")
+            elif min_side == "right":
+                self.execute_action("spin_left")
 
     def get_sonar_distances(self) -> dict:
         if self.simulated:
