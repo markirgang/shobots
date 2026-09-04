@@ -74,8 +74,7 @@ BluetoothSerial SerialBT;
 // Hardware Profile Selection
 // =============================================================================
 // Select ONE board profile below (Waveshare ESP32-S3-Touch-LCD-7C):
-#define BOARD_ESP32_TOUCH_LCD_7C 1 // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 800x600 HD GT911 + CH422G IO + Audio Codec)
-
+#define BOARD_ESP32_TOUCH_LCD_7C 1 // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 800x600 HD GT911 + CH422G// Pin & Resolution Definitions
 #if defined(BOARD_ESP32_TOUCH_LCD_7C)
   #define I2C_SDA_PIN      8
   #define I2C_SCL_PIN      9
@@ -84,8 +83,37 @@ BluetoothSerial SerialBT;
   #define SCREEN_WIDTH   800
   #define SCREEN_HEIGHT  600
   #define TOUCH_I2C_ADDR 0x5D // GT911 Capacitive Touch Controller
+  #define IS_GT911_TOUCH   1
   #define HAS_CH422G_IO    1  // Onboard IO Expander for Backlight & Power Control
+#endif
+
+// =============================================================================
+// Waveshare 7.0" Parallel 16-Bit RGB Display Driver Initialization (Arduino_GFX)
+// =============================================================================
+#if __has_include(<Arduino_GFX_Library.h>)
+#include <Arduino_GFX_Library.h>
+#define HAS_ARDUINO_GFX 1
 #else
+#define HAS_ARDUINO_GFX 0
+#endif
+
+#if HAS_ARDUINO_GFX
+Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
+    5 /* DE */, 3 /* VSYNC */, 46 /* HSYNC */, 7 /* PCLK */,
+    1, 2, 42, 41, 40,      // R3-R7
+    39, 0, 45, 48, 47, 21, // G2-G7
+    14, 38, 18, 17, 10,    // B3-B7
+    1, 48, 162, 152,
+    1, 3, 45, 13,
+    1, 16000000
+);
+Arduino_RGB_Display *gfx = new Arduino_RGB_Display(SCREEN_WIDTH, SCREEN_HEIGHT, rgbpanel, 0, true);
+bool gfxAvailable = true;
+#else
+bool gfxAvailable = false;
+#endif
+
+#if !defined(BOARD_ESP32_TOUCH_LCD_7C)
   #define I2C_SDA_PIN      8
   #define I2C_SCL_PIN      9
   #define TP_INT_PIN       4
@@ -1165,6 +1193,21 @@ void setup() {
 
   // Initialize Waveshare 7C Onboard IO Expander (CH422G for Backlight & Power)
   initIOExpander7C();
+
+#if HAS_ARDUINO_GFX
+  if (gfx) {
+    gfx->begin();
+    gfx->fillScreen(0x0000);
+    gfx->setTextColor(0xFFFF);
+    gfx->setTextSize(2);
+    gfx->setCursor(20, 20);
+    gfx->println("Waveshare 6-DOF Robot Arm LCD Online");
+    gfx->setTextSize(1);
+    gfx->setCursor(20, 50);
+    gfx->println("16-Bit RGB Panel Driver Active (800x600)");
+    Serial.println("[RGB Display] Arduino_GFX RGB Panel Driver Initialized Successfully.");
+  }
+#endif
 
   // Initialize PCA9685 Servo Driver
   initPCA9685();

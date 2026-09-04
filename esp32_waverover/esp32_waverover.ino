@@ -96,6 +96,32 @@ BluetoothSerial SerialBT;
 #define SCREEN_WIDTH         800
 #define SCREEN_HEIGHT        600
 
+// =============================================================================
+// Waveshare 7.0" Parallel 16-Bit RGB Display Driver Initialization (Arduino_GFX)
+// =============================================================================
+#if __has_include(<Arduino_GFX_Library.h>)
+#include <Arduino_GFX_Library.h>
+#define HAS_ARDUINO_GFX 1
+#else
+#define HAS_ARDUINO_GFX 0
+#endif
+
+#if HAS_ARDUINO_GFX
+Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
+    5 /* DE */, 3 /* VSYNC */, 46 /* HSYNC */, 7 /* PCLK */,
+    1, 2, 42, 41, 40,      // R3-R7
+    39, 0, 45, 48, 47, 21, // G2-G7
+    14, 38, 18, 17, 10,    // B3-B7
+    1, 48, 162, 152,
+    1, 3, 45, 13,
+    1, 16000000
+);
+Arduino_RGB_Display *gfx = new Arduino_RGB_Display(SCREEN_WIDTH, SCREEN_HEIGHT, rgbpanel, 0, true);
+bool gfxAvailable = true;
+#else
+bool gfxAvailable = false;
+#endif
+
 // State Variables
 bool mouthState = false;       // false = closed, true = open
 bool bodyMotorState = false;   // false = off, true = on
@@ -530,6 +556,21 @@ void setup() {
   setEyeLeds(true);
   setHeadlights(false);
   drive4WDMotors(0, 0, 0, 0);
+
+#if HAS_ARDUINO_GFX
+  if (gfx) {
+    gfx->begin();
+    gfx->fillScreen(0x0000);
+    gfx->setTextColor(0xFFFF);
+    gfx->setTextSize(2);
+    gfx->setCursor(20, 20);
+    gfx->println("Waveshare 4WD Rover Touch LCD Online");
+    gfx->setTextSize(1);
+    gfx->setCursor(20, 50);
+    gfx->println("16-Bit RGB Panel Driver Active (800x600)");
+    Serial.println("[RGB Display] Arduino_GFX RGB Panel Driver Initialized Successfully.");
+  }
+#endif
 
   // Initialize MAX98357A I2S Audio
   initI2SAudio();
