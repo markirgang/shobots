@@ -3,10 +3,10 @@
   =============================================================================
   Folder: esp32_tello/
   Sketch: esp32_tello.ino
-  Hardware: Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 Capacitive Touchscreen, GT911)
+  Hardware: Waveshare ESP32-S3-Touch-LCD-7C (7.0" 800x600 Capacitive Touchscreen, GT911)
   
   Features:
-    - 7.0-inch 1024x600 Widescreen Capacitive Touchscreen Drone Dashboard & HUD
+    - 7.0-inch 800x600 Widescreen Capacitive Touchscreen Drone Dashboard & HUD
     - GT911 High-Precision 5-Point Capacitive Multi-Touch Controller (I2C Address: 0x5D)
     - WiFi & Direct UDP Socket Communication with DJI Tello Drone:
         * Command & Control Port: UDP 192.168.10.1:8889 (Sends SDK commands, receives ACK 'ok')
@@ -40,7 +40,7 @@
         * SCL    : GPIO 9  (PH2.0 4-Pin I2C Header)
         * TP_INT : GPIO 4  (GT911 Interrupt Pin)
         * GT911 Address: 0x5D (or 0x14)
-    - RGB Display Interface (1024x600 16-bit RGB565)
+    - RGB Display Interface (800x600 16-bit RGB565)
   =============================================================================
 */
 
@@ -82,15 +82,15 @@ BluetoothSerial SerialBT;
 // Hardware Configuration & Board Profiles
 // =============================================================================
 // Select ONE board profile below (Waveshare ESP32-S3-Touch-LCD-7C):
-#define BOARD_ESP32_TOUCH_LCD_7C   1  // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 HD GT911 + CH422G IO + Audio Codec)
+#define BOARD_ESP32_TOUCH_LCD_7C   1  // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 800x600 HD GT911 + CH422G IO + Audio Codec)
 
 #if defined(BOARD_ESP32_TOUCH_LCD_7C)
   #define SCREEN_WIDTH       800
-  #define SCREEN_HEIGHT       480
+  #define SCREEN_HEIGHT       600
   #define HAS_CH422G_IO        1  // Onboard IO Expander for Backlight & Power Control
 #else
   #define SCREEN_WIDTH       800
-  #define SCREEN_HEIGHT       480
+  #define SCREEN_HEIGHT       600
   #define HAS_CH422G_IO        0
 #endif
 
@@ -1096,7 +1096,7 @@ void setup() {
   Serial.println("==========================================================");
   Serial.println("🚁 Waveshare ESP32-S3-Touch-LCD-7C Tello Drone Bridge & HUD");
   Serial.println("==========================================================");
-  Serial.println("Screen: 7.0-inch 1024x600 HD Capacitive Touch LCD");
+  Serial.println("Screen: 7.0-inch 800x600 HD Capacitive Touch LCD");
   Serial.println("IO Expander: CH422G (Backlight EXIO2, Power EXIO6, Touch RST EXIO1)");
   Serial.println("Touch Controller: GT911 (I2C: 0x5D, SDA: 8, SCL: 9, INT: 4)");
   Serial.print("MAX98357A I2S Audio: ");

@@ -3,11 +3,11 @@
   =============================================================================
   Folder: esp32_Birds/
   Sketch: esp32_Birds.ino
-  Hardware: Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 Capacitive Touchscreen, GT911)
+  Hardware: Waveshare ESP32-S3-Touch-LCD-7C (7.0" 800x600 Capacitive Touchscreen, GT911)
   Substituted for: Dual ESP32 DevKits (Left & Right Boards)
 
   Features:
-    - 7.0-inch 1024x600 Widescreen Capacitive Touchscreen Dashboard
+    - 7.0-inch 800x600 Widescreen Capacitive Touchscreen Dashboard
     - GT911 High-Precision 5-Point Capacitive Multi-Touch Controller
     - MCP23017 16-Bit I2C I/O Expander Board for On/Off Bird Outputs (Lights, Solenoids, Chirps, Motors)
         * Primary MCP23017 (I2C Address: 0x20): Left & Right Bird Outputs (Pins 0-15)
@@ -89,15 +89,15 @@ struct TouchButton {
 // Hardware Configuration & Board Profiles
 // =============================================================================
 // Select ONE board profile below (Waveshare ESP32-S3-Touch-LCD-7C):
-#define BOARD_ESP32_TOUCH_LCD_7C   1  // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 HD GT911 + CH422G IO + Audio Codec)
+#define BOARD_ESP32_TOUCH_LCD_7C   1  // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 800x600 HD GT911 + CH422G IO + Audio Codec)
 
 #if defined(BOARD_ESP32_TOUCH_LCD_7C)
   #define SCREEN_WIDTH          800
-  #define SCREEN_HEIGHT         480
+  #define SCREEN_HEIGHT         600
   #define HAS_CH422G_IO           1   // Onboard IO Expander for Backlight & Power Control
 #else
   #define SCREEN_WIDTH          800
-  #define SCREEN_HEIGHT         480
+  #define SCREEN_HEIGHT         600
   #define HAS_CH422G_IO           0
 #endif
 
@@ -1621,7 +1621,7 @@ void setup() {
 
   Serial.println("==========================================================");
   Serial.println("🦜 Waveshare ESP32-S3-Touch-LCD-7C Birds & LED Controller");
-  Serial.println("Display: 1024x600 HD Widescreen RGB | Touch: GT911 Capacitive");
+  Serial.println("Display: 800x600 HD Widescreen RGB | Touch: GT911 Capacitive");
   Serial.println("IO Expander: CH422G (Backlight EXIO2, Power EXIO6, Touch RST EXIO1)");
   Serial.println("==========================================================");
   Serial.print("MAX98357A I2S Audio: ");

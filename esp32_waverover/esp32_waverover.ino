@@ -94,7 +94,7 @@ BluetoothSerial SerialBT;
 
 // Screen Profile
 #define SCREEN_WIDTH         800
-#define SCREEN_HEIGHT        480
+#define SCREEN_HEIGHT        600
 
 // State Variables
 bool mouthState = false;       // false = closed, true = open

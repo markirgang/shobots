@@ -1,11 +1,11 @@
 /*
   Shobots - ESP-32-Touch-LCD 7C 6-DOF Robot Arm Firmware
   =============================================================================
-  Hardware: Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 HD Capacitive Touchscreen, GT911 Controller)
+  Hardware: Waveshare ESP32-S3-Touch-LCD-7C (7.0" 800x600 HD Capacitive Touchscreen, GT911 Controller)
   Substituted for: ESP-32 DevKit
 
   Features:
-    - 7.0-inch 1024x600 High-Definition Capacitive Touchscreen Dashboard
+    - 7.0-inch 800x600 High-Definition Capacitive Touchscreen Dashboard
     - GT911 High-Precision 5-Point Capacitive Multi-Touch Controller
     - Onboard IO Expander (CH422G) Backlight & Power Control (EXIO2 DISP, EXIO6 LCD_VDD_EN, EXIO1 TP_RST)
     - Real-Time Live Telemetry:
@@ -74,7 +74,7 @@ BluetoothSerial SerialBT;
 // Hardware Profile Selection
 // =============================================================================
 // Select ONE board profile below (Waveshare ESP32-S3-Touch-LCD-7C):
-#define BOARD_ESP32_TOUCH_LCD_7C 1 // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 HD GT911 + CH422G IO + Audio Codec)
+#define BOARD_ESP32_TOUCH_LCD_7C 1 // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 800x600 HD GT911 + CH422G IO + Audio Codec)
 
 #if defined(BOARD_ESP32_TOUCH_LCD_7C)
   #define I2C_SDA_PIN      8
@@ -82,7 +82,7 @@ BluetoothSerial SerialBT;
   #define TP_INT_PIN       4
   #define TP_RST_PIN      -1
   #define SCREEN_WIDTH   800
-  #define SCREEN_HEIGHT  480
+  #define SCREEN_HEIGHT  600
   #define TOUCH_I2C_ADDR 0x5D // GT911 Capacitive Touch Controller
   #define HAS_CH422G_IO    1  // Onboard IO Expander for Backlight & Power Control
 #else
@@ -140,7 +140,7 @@ unsigned long routineStepTime = 0;
 int routineStepIndex = 0;
 
 // LCD Telemetry & Mascot Animation Variables
-String armStatusMessage = "Waveshare 7C (1024x600) 6-DOF Arm Online";
+String armStatusMessage = "Waveshare 7C (800x600) 6-DOF Arm Online";
 String mascotExpression = "idle"; // idle, happy, shake, star, wink, nod
 unsigned long lastTelemetryUpdate = 0;
 unsigned long lastMascotBlink = 0;
@@ -1149,7 +1149,7 @@ void setup() {
 
   Serial.println("==========================================================");
   Serial.println("🦾 Waveshare ESP32-S3-Touch-LCD-7C 6-DOF Robot Arm");
-  Serial.println("Display: 1024x600 HD Widescreen RGB | Touch: GT911 Capacitive");
+  Serial.println("Display: 800x600 HD Widescreen RGB | Touch: GT911 Capacitive");
   Serial.println("IO Expander: CH422G (Backlight DISP & Power Control)");
   Serial.println("Telemetry: Live 6-Joint Angles, 3D Cartesian IK & FK Engine");
   Serial.println("Animation: Real-Time Multi-Link Kinematic Simulation & Mascot");

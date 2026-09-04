@@ -1,6 +1,6 @@
 # Waveshare ESP32-S3-Touch-LCD-7C 6-Leg Hexapod Hardware & Telemetry Guide
 
-This document describes the hardware configuration, pinout mapping, wiring diagrams, and flashing instructions for the 6-leg Hexapod robot running on the **Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 1024×600 High-Definition Capacitive Touchscreen)** module (Version C), substituted for the standard ESP 32 Devkit.
+This document describes the hardware configuration, pinout mapping, wiring diagrams, and flashing instructions for the 6-leg Hexapod robot running on the **Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 800×600 High-Definition Capacitive Touchscreen)** module (Version C), substituted for the standard ESP 32 Devkit.
 
 ---
 
@@ -8,10 +8,10 @@ This document describes the hardware configuration, pinout mapping, wiring diagr
 
 | Feature | Legacy ESP 32 DevKit | **Waveshare ESP32-S3-Touch-LCD-7C (Version C)** |
 | :--- | :--- | :--- |
-| **Display Panel** | None | **7.0-inch 1024×600 High-Definition IPS RGB Display** |
+| **Display Panel** | None | **7.0-inch 800×600 High-Definition IPS RGB Display** |
 | **Touch Controller** | None | **Goodix GT911 5-Point Capacitive Multi-Touch (I2C: `0x5D`)** |
 | **IO Expander** | None | **WCH CH422G (Addresses `0x24`/`0x38`) for Backlight, LCD Power & Touch Reset** |
-| **Onboard Controls** | None | **1024×600 HD Widescreen Touch Buttons (Stand, Walk, Dance, Gestures, Speed)** |
+| **Onboard Controls** | None | **800×600 HD Widescreen Touch Buttons (Stand, Walk, Dance, Gestures, Speed)** |
 | **Telemetry & Visuals** | Serial logs | **Live Telemetry, Joint Angles, Speed & Animated Robot Face** |
 | **Audio Output** | None | **MAX98357A I2S Mono Audio Amplifier (BCLK=19, LRC=20, DIN=21)** |
 | **Microcontroller** | ESP32-WROOM | **ESP32-S3-WROOM-1 (16MB Flash, 8MB Octal PSRAM @ 240MHz)** |
@@ -63,7 +63,7 @@ The **Waveshare ESP32-S3-Touch-LCD-7C** includes **built-in onboard audio hardwa
 | **GT911 RST** | `EXIO1` (CH422G) | Touch Reset line (Active High) |
 | **Backlight (DISP)** | `EXIO2` (CH422G) | LCD Backlight Enable (Active High) |
 | **LCD Power (LCD_VDD_EN)** | `EXIO6` (CH422G) | LCD Power Rail Enable (Active High) |
-| **Display RGB Data** | `GPIO 0-2, 10, 14, 17, 18, 21, 38-42, 45, 47, 48` | 16-bit parallel RGB interface (1024×600) |
+| **Display RGB Data** | `GPIO 0-2, 10, 14, 17, 18, 21, 38-42, 45, 47, 48` | 16-bit parallel RGB interface (800×600) |
 | **Display Sync** | `GPIO 7` (PCLK), `GPIO 3` (VSYNC), `GPIO 46` (HSYNC), `GPIO 5` (DE) | RGB Timing & Clock Signals |
 
 ---
@@ -115,7 +115,7 @@ The **Waveshare ESP32-S3-Touch-LCD-7C** includes **built-in onboard audio hardwa
 
 ## 5. Controlling the 7C Hexapod
 
-- **Direct HD Touchscreen**: Tap any button on the 1024×600 touchscreen (`STAND`, `SIT`, `FLAT`, `BOW`, `WALK`, `RUN`, `DANCE`, `WAVE LEFT`, `WAVE RIGHT`, `TURN LEFT`, `TURN RIGHT`, `STOP`, `SPEED +/-`, `SPEECH: ON`).
+- **Direct HD Touchscreen**: Tap any button on the 800×600 touchscreen (`STAND`, `SIT`, `FLAT`, `BOW`, `WALK`, `RUN`, `DANCE`, `WAVE LEFT`, `WAVE RIGHT`, `TURN LEFT`, `TURN RIGHT`, `STOP`, `SPEED +/-`, `SPEECH: ON`).
 - **Python GUI / Gemini AI**: Connect via Bluetooth (`hexapod-touch-7c` or USB COM port) and control verbally or via GUI sliders in `main.py` and `app.js`.
 
 ---

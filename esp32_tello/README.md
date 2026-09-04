@@ -2,13 +2,13 @@
 
 **Folder:** `esp32_tello/`  
 **Sketch:** `esp32_tello.ino`  
-**Hardware:** Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024×600 High-Definition Capacitive Touchscreen, GT911 Touch Controller, CH422G IO Expander)
+**Hardware:** Waveshare ESP32-S3-Touch-LCD-7C (7.0" 800×600 High-Definition Capacitive Touchscreen, GT911 Touch Controller, CH422G IO Expander)
 
 ---
 
 ## 🌟 Overview
 
-The **Waveshare ESP32-S3-Touch-LCD-7C Tello Bridge & HUD** firmware transforms the Waveshare ESP32-S3 7.0-inch 1024×600 HD Touch LCD into an intelligent flight command bridge, dynamic HUD visualizer, and flight telemetry dashboard for the DJI Tello drone.
+The **Waveshare ESP32-S3-Touch-LCD-7C Tello Bridge & HUD** firmware transforms the Waveshare ESP32-S3 7.0-inch 800×600 HD Touch LCD into an intelligent flight command bridge, dynamic HUD visualizer, and flight telemetry dashboard for the DJI Tello drone.
 
 Instead of the PC communicating over raw UDP sockets directly to the drone, all commands from:
 1. **The Thinker Window (PC Tkinter GUI Tab)**

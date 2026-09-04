@@ -726,7 +726,7 @@ async function connectSession() {
                 },
                 {
                   name: "control_hexapod",
-                  description: "Controls the 6-leg Hexapod robot driven by the Waveshare ESP32-S3-Touch-LCD-7C controller (over Bluetooth 'hexapod-touch-7c' or USB serial). Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message'. Can also adjust leg joints or display custom text on the onboard 1024x600 HD Touch LCD.",
+                  description: "Controls the 6-leg Hexapod robot driven by the Waveshare ESP32-S3-Touch-LCD-7C controller (over Bluetooth 'hexapod-touch-7c' or USB serial). Supported motion presets: 'walk', 'run', 'wave_left_arm', 'wave_right_arm', 'dance', 'sit', 'stand', 'flat_to_floor', 'stop', 'turn_left', 'turn_right', 'bow', 'set_lcd_message'. Can also adjust leg joints or display custom text on the onboard 800x600 HD Touch LCD.",
                   parameters: {
                     type: "OBJECT",
                     properties: {
@@ -774,7 +774,7 @@ async function connectSession() {
                       },
                       lcd_message: {
                         type: "STRING",
-                        description: "Custom status message to display on the 1024x600 HD Touchscreen."
+                        description: "Custom status message to display on the 800x600 HD Touchscreen."
                       }
                     },
                     required: ["action"]
@@ -820,7 +820,7 @@ async function connectSession() {
                       },
                       lcd_message: {
                         type: "STRING",
-                        description: "Custom text message to display on the 7.0\" 1024x600 HD LCD screen."
+                        description: "Custom text message to display on the 7.0\" 800x600 HD LCD screen."
                       }
                     },
                     required: ["action"]

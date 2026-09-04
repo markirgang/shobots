@@ -1,12 +1,12 @@
 /*
   Shobots - ESP-32-Touch-LCD Firmware (7-Inch Capacitive Touchscreen Edition)
   =============================================================================
-  Hardware: ESP32-S3-Touch-LCD-7C (7.0" 1024x600 Capacitive Touchscreen, GT911 Controller)
+  Hardware: ESP32-S3-Touch-LCD-7C (7.0" 800x600 Capacitive Touchscreen, GT911 Controller)
             Also supports 1.28", 2.8", 3.5", 4.3" and Generic ESP32 Touch LCDs.
   Substituted for: ESP-32 DevKit
 
   Features:
-    - 7.0-inch 1024x600 Widescreen Capacitive Touchscreen Dashboard
+    - 7.0-inch 800x600 Widescreen Capacitive Touchscreen Dashboard
     - GT911 High-Precision 5-Point Capacitive Multi-Touch Interface
     - Interactive Touch Buttons:
         [STAND], [SIT], [FLAT], [WALK], [RUN], [DANCE], [BOW], [WAVE L], [WAVE R], [TURN L], [TURN R], [STOP], [SPEED +/-]
@@ -25,7 +25,7 @@
         * TP_INT: GPIO 4
         * TP_RST: Controlled via onboard IO Expander (or direct GPIO)
         * GT911 I2C Address: 0x5D (or 0x14)
-    - RGB Display Interface (1024x600 16-bit RGB565)
+    - RGB Display Interface (800x600 16-bit RGB565)
   =============================================================================
 */
 
@@ -66,7 +66,7 @@ BluetoothSerial SerialBT;
 // Hardware Profile Selection
 // =============================================================================
 // Select ONE board profile below (Waveshare ESP32-S3-Touch-LCD-7C):
-#define BOARD_ESP32_TOUCH_LCD_7C   1  // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 1024x600 HD GT911 + CH422G IO + Audio Codec)
+#define BOARD_ESP32_TOUCH_LCD_7C   1  // Waveshare ESP32-S3-Touch-LCD-7C (7.0" 800x600 HD GT911 + CH422G IO + Audio Codec)
 
 // Pin & Resolution Definitions
 #if defined(BOARD_ESP32_TOUCH_LCD_7C)
@@ -75,7 +75,7 @@ BluetoothSerial SerialBT;
   #define TP_INT_PIN       4
   #define TP_RST_PIN      -1
   #define SCREEN_WIDTH   800
-  #define SCREEN_HEIGHT  480
+  #define SCREEN_HEIGHT  600
   #define TOUCH_I2C_ADDR 0x5D // GT911 Capacitive Touch Controller
   #define IS_GT911_TOUCH   1
   #define HAS_CH422G_IO    1  // Onboard IO Expander for Backlight & Power Control
@@ -1309,7 +1309,7 @@ void setup() {
 
   Serial.println("==========================================================");
   Serial.println("🤖 Waveshare ESP32-S3-Touch-LCD-7C Hexapod Robot Controller");
-  Serial.println("Display: 1024x600 HD Widescreen RGB | Touch: GT911 Capacitive");
+  Serial.println("Display: 800x600 HD Widescreen RGB | Touch: GT911 Capacitive");
   Serial.println("I2C Bus: SDA=GPIO 8, SCL=GPIO 9 | Dual PCA9685 18 Servos");
   Serial.println("IO Expander: CH422G (Backlight EXIO2, Power EXIO6, Touch RST EXIO1)");
   Serial.println("Hardware Profile: Waveshare ESP32-S3-Touch-LCD-7C");

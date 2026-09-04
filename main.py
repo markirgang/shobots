@@ -584,7 +584,7 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         types.FunctionDeclaration(
             name="control_robot_arm",
             description=(
-                "Controls a 6 degrees of freedom (6-DOF) Robot Arm driven by a Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 1024x600 HD Capacitive Touchscreen with live telemetry and animation) via a PCA9685 servo driver. "
+                "Controls a 6 degrees of freedom (6-DOF) Robot Arm driven by a Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 800x600 HD Capacitive Touchscreen with live telemetry and animation) via a PCA9685 servo driver. "
                 "Allows triggering gestures ('yes', 'no', 'high_five', 'wave', 'bow', 'dance'), "
                 "executing preset demonstration motions ('home', 'rest', 'reach', 'pick_and_place', 'open_gripper', 'close_gripper', 'stop'), "
                 "setting individual joint angles (channel 0: Base, 1: Shoulder, 2: Elbow, 3: Wrist Pitch, 4: Wrist Roll, 5: Gripper), "
@@ -822,7 +822,7 @@ def get_config(voice_name="Zephyr", enable_esp32=True):
         "You are a helpful real-time multimodal voice assistant running on the user's local computer. "
         "You have direct access to local hardware and smart devices: an onboard LED of an ESP32 microcontroller, "
         "a 6-leg Hexapod robot powered by the ESP-32-Touch-LCD controller (Bluetooth: 'hexapod-touch-lcd' / Serial) with an onboard interactive touch screen and 4-way HC-SR04 ultrasonic proximity sensors, "
-        "a 6-DOF Robot Arm powered by a Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 1024x600 HD Capacitive Touchscreen with live telemetry & animation) via PCA9685, "
+        "a 6-DOF Robot Arm powered by a Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 800x600 HD Capacitive Touchscreen with live telemetry & animation) via PCA9685, "
         "a Birds & LED stage controller powered by a unified Waveshare ESP32-S3-Touch-LCD-7 (7.0-inch 800x480 Capacitive Touchscreen with MCP23017 I/O Expander, Dual PCA9685 Servo Drivers, animated parrot mascot, and light shows), "
         "a 4-Motor AWD Mobile Platform powered by ESP32 (with 2 x LM298 reversing dual motor drivers for Front Left/Right and Rear Left/Right wheels, eye LEDs, pan-tilt camera, 4-way HC-SR04 ultrasonic proximity sensors, and MAX98357A I2S audio), "
         "a Tello drone, Leviton smart lights, and eWeLink (Sonoff) devices. All 5 ESP32-S3 touchscreen controllers are equipped with MAX98357A I2S Class-D mono audio amplifiers.\n\n"

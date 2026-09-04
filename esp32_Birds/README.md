@@ -1,12 +1,12 @@
 # Waveshare ESP32-S3-Touch-LCD-7C Birds & LED Controller Hardware Guide
 
-Firmware for the **Waveshare ESP32-S3-Touch-LCD-7C** (7.0-inch 1024×600 High-Definition Capacitive Touchscreen, GT911 controller, CH422G IO Expander) replacing the dual ESP32 DevKits (Left and Right boards) with a single high-performance multimodal controller featuring an **MCP23017 16-Bit I/O Expander Board**, **Dual PCA9685 16-Channel I2C Servo Drivers** (32 PWM channels total), and a **Microphone Sound Detection Module** for AI speech animatronics.
+Firmware for the **Waveshare ESP32-S3-Touch-LCD-7C** (7.0-inch 800×600 High-Definition Capacitive Touchscreen, GT911 controller, CH422G IO Expander) replacing the dual ESP32 DevKits (Left and Right boards) with a single high-performance multimodal controller featuring an **MCP23017 16-Bit I/O Expander Board**, **Dual PCA9685 16-Channel I2C Servo Drivers** (32 PWM channels total), and a **Microphone Sound Detection Module** for AI speech animatronics.
 
 ---
 
 ## 🌟 Features
 
-- **7.0-inch 1024×600 HD Capacitive Touchscreen Dashboard**:
+- **7.0-inch 800×600 HD Capacitive Touchscreen Dashboard**:
   - Live interactive tiles for Left and Right bird functions with glowing cyan & neon purple status rings.
   - On-screen **Parrot Speaker Selector Switch** (`👈 L PARROT`, `🦜 BOTH`, `👉 R PARROT`) and `🎤 MIC REACT: ON/OFF`.
   - Direct touch sliders and position readouts for PCA9685 PWM servos.

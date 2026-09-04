@@ -1,6 +1,6 @@
 # Waveshare ESP32-S3-Touch-LCD-7C 6-DOF Robot Arm Hardware & Telemetry Guide
 
-This document describes the hardware configuration, pinout mapping, wiring diagrams, and telemetry features for the 6-DOF Robot Arm powered by the **Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 1024x600 High-Definition Capacitive Touchscreen)** module (Version C), substituted for the standard ESP 32 Devkit.
+This document describes the hardware configuration, pinout mapping, wiring diagrams, and telemetry features for the 6-DOF Robot Arm powered by the **Waveshare ESP32-S3-Touch-LCD-7C (7.0-inch 800x600 High-Definition Capacitive Touchscreen)** module (Version C), substituted for the standard ESP 32 Devkit.
 
 ---
 
@@ -8,12 +8,12 @@ This document describes the hardware configuration, pinout mapping, wiring diagr
 
 | Feature | Legacy ESP 32 DevKit | **Waveshare ESP32-S3-Touch-LCD-7C (Version C)** |
 | :--- | :--- | :--- |
-| **Interactive Interface** | Headless (Terminal only) | **7.0-inch 1024×600 High-Definition RGB Display + GT911 Capacitive Multi-Touch** |
+| **Interactive Interface** | Headless (Terminal only) | **7.0-inch 800×600 High-Definition RGB Display + GT911 Capacitive Multi-Touch** |
 | **Backlight & Power** | Fixed / External | **Onboard CH422G I/O Expander (`EXIO2` Backlight DISP, `EXIO6` VCOM/Power)** |
 | **Live Telemetry** | None | **Real-Time 6-Joint Angles, 3D Cartesian (X,Y,Z,Pitch,Roll) & Workspace Reach** |
 | **Audio Output** | None | **MAX98357A I2S Mono Audio Amplifier (BCLK=19, LRC=20, DIN=21)** |
 | **Kinematic Animation**| None | **Live Multi-Link Arm Simulation & Expressive Cyber Mascot Animations** |
-| **Onboard Controls** | None | **1024×600 Widescreen Multi-Touch Buttons (Home, Rest, Reach, Gestures, Gripper)** |
+| **Onboard Controls** | None | **800×600 Widescreen Multi-Touch Buttons (Home, Rest, Reach, Gestures, Gripper)** |
 | **Microcontroller** | ESP32-WROOM | **ESP32-S3-WROOM-1-N16R8 (Dual-Core 240MHz, 16MB Flash, 8MB Octal PSRAM)** |
 | **I2C Bus for Servos** | GPIO 21 / 22 | **GPIO 8 (SDA) / GPIO 9 (SCL) via HY2.0 4-Pin I2C Header** |
 
@@ -63,7 +63,7 @@ The **Waveshare ESP32-S3-Touch-LCD-7C** includes **built-in onboard audio hardwa
 | **Touch RST (TP_RST)** | `EXIO1` (CH422G) | Touch Controller Reset |
 | **Backlight (DISP)** | `EXIO2` (CH422G) | Screen Backlight Enable / PWM Brightness |
 | **LCD Power (LCD_VDD_EN)** | `EXIO6` (CH422G) | VCOM / LCD Power Rail Enable |
-| **Display RGB Data** | GPIO 0-2, 10, 14, 17, 18, 21, 38-42, 45, 47, 48 | 16-bit parallel RGB interface (1024×600) |
+| **Display RGB Data** | GPIO 0-2, 10, 14, 17, 18, 21, 38-42, 45, 47, 48 | 16-bit parallel RGB interface (800×600) |
 | **Display Sync** | GPIO 7 (PCLK), GPIO 3 (VSYNC), GPIO 46 (HSYNC), GPIO 5 (DE) | RGB Timing & Clock Signals |
 
 ---
@@ -87,7 +87,7 @@ The **Waveshare ESP32-S3-Touch-LCD-7C** includes **built-in onboard audio hardwa
    - Calculates real-time 3D Cartesian coordinates $(X, Y, Z)$ of the gripper tip in mm.
    - Computes live end-effector pitch angle and roll orientation.
 2. **Dynamic Kinematic Multi-Link Wireframe Animation**:
-   - Renders a real-time 2D/3D kinematic simulation of the arm links on the 1024×600 display following joint angles at 50Hz.
+   - Renders a real-time 2D/3D kinematic simulation of the arm links on the 800×600 display following joint angles at 50Hz.
 3. **Cyber Mascot Facial Expressions**:
    - **Idle**: Gentle breathing / blinking eyes.
    - **Yes / Nod**: Happy curved smile eyes.
