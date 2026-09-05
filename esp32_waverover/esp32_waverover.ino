@@ -64,10 +64,21 @@ BluetoothSerial SerialBT;
 #define REAR_RIGHT_IN4_PIN   8
 #define REAR_RIGHT_ENB_PIN   9
 
+// 3rd Auxiliary LM298 Motor Driver (Mouth & Body Actuators)
+// Channel A - Mouth Motor
+#define MOUTH_IN1_PIN        35
+#define MOUTH_IN2_PIN        36
+#define MOUTH_ENA_PIN        37
+
+// Channel B - Body Motor
+#define BODY_IN3_PIN         26
+#define BODY_IN4_PIN         27
+#define BODY_ENB_PIN         33
+
 // Eye LEDs Output
 #define EYES_LED_PIN         10
 
-// Headlights Output
+// Headlights Output (N-Channel MOSFET Driver Module: SIG = GPIO 7)
 #define HEADLIGHTS_LED_PIN   7
 
 // Pan-Tilt Camera Servo Channels
@@ -92,12 +103,20 @@ BluetoothSerial SerialBT;
 #define RIGHT_TRIG_PIN       40
 #define RIGHT_ECHO_PIN       45
 
-// Screen Profile
-#define SCREEN_WIDTH         800
-#define SCREEN_HEIGHT        600
+// Screen Profile: Waveshare ST7789VW 240x320 IPS 2" Display (320x240 Landscape)
+#define SCREEN_WIDTH         320
+#define SCREEN_HEIGHT        240
+
+// Waveshare ST7789VW 4-Wire SPI Display Pin Mapping
+#define TFT_DC               0
+#define TFT_CS               46
+#define TFT_SCLK             48
+#define TFT_MOSI             47
+#define TFT_RST              44
+#define TFT_BL               43
 
 // =============================================================================
-// Waveshare 7.0" Parallel 16-Bit RGB Display Driver Initialization (Arduino_GFX)
+// Waveshare ST7789VW 240x320 IPS 2" Display Driver Initialization (Arduino_GFX)
 // =============================================================================
 #if __has_include(<Arduino_GFX_Library.h>)
 #include <Arduino_GFX_Library.h>
@@ -107,16 +126,8 @@ BluetoothSerial SerialBT;
 #endif
 
 #if HAS_ARDUINO_GFX
-Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
-    5 /* DE */, 3 /* VSYNC */, 46 /* HSYNC */, 7 /* PCLK */,
-    1, 2, 42, 41, 40,      // R3-R7
-    39, 0, 45, 48, 47, 21, // G2-G7
-    14, 38, 18, 17, 10,    // B3-B7
-    1, 48, 162, 152,
-    1, 3, 45, 13,
-    1, 16000000
-);
-Arduino_RGB_Display *gfx = new Arduino_RGB_Display(SCREEN_WIDTH, SCREEN_HEIGHT, rgbpanel, 0, true);
+Arduino_DataBus *bus = new Arduino_ESP32SPI(TFT_DC, TFT_CS, TFT_SCLK, TFT_MOSI, GFX_NOT_DEFINED);
+Arduino_GFX *gfx = new Arduino_ST7789(bus, TFT_RST, 1 /* rotation: 1 = landscape 320x240 */, true /* IPS */, 240, 320, 0, 0, 0, 0);
 bool gfxAvailable = true;
 #else
 bool gfxAvailable = false;
@@ -244,15 +255,109 @@ void sendSonarTelemetry() {
 #endif
 }
 
-// Render 4-Way Ultrasonic Proximity HUD on Waveshare TouchLCD-7C Screen
-void renderTouchLCD7CSonarHUD() {
-  // Console / Telemetry logging for LCD UI overlay
+// Render 4-Way Ultrasonic Proximity HUD on Waveshare ST7789VW 240x320 IPS Screen (320x240 Landscape)
+void renderST7789SonarHUD() {
   static unsigned long lastHudLog = 0;
+  static unsigned long lastGfxUpdate = 0;
+
   if (millis() - lastHudLog > 1000) {
     lastHudLog = millis();
-    Serial.printf("[Waveshare TouchLCD-7C HUD] Sonar -> FRONT: %d cm | REAR: %d cm | LEFT: %d cm | RIGHT: %d cm\n",
+    Serial.printf("[Waveshare ST7789 HUD] Sonar -> FRONT: %d cm | REAR: %d cm | LEFT: %d cm | RIGHT: %d cm\n",
                   sonarFrontCm, sonarRearCm, sonarLeftCm, sonarRightCm);
   }
+
+#if HAS_ARDUINO_GFX
+  if (gfxAvailable && gfx && (millis() - lastGfxUpdate > 150)) { // Refresh display at ~6.6 Hz
+    lastGfxUpdate = millis();
+
+    // 1. Header Bar (y: 0 to 28)
+    gfx->fillRect(0, 0, 320, 28, 0x18E3); // Dark Blue
+    gfx->setTextColor(0xFFFF);            // White
+    gfx->setTextSize(2);
+    gfx->setCursor(10, 6);
+    gfx->print("WAVEROVER ST7789 HUD");
+
+    // 2. Motion & Telemetry Banner (y: 30 to 95)
+    gfx->fillRect(0, 30, 320, 65, 0x0842); // Slate Dark Background
+    gfx->drawRect(0, 30, 320, 65, 0x39E7); // Border
+    gfx->setTextSize(1);
+    gfx->setTextColor(0x07FF);             // Cyan
+    gfx->setCursor(10, 36);
+    gfx->print("MOTION: ");
+    gfx->setTextColor(0xFFFF);
+    gfx->print(currentMotion);
+    gfx->print(" (");
+    gfx->print(currentSpeed);
+    gfx->println("%)");
+
+    gfx->setCursor(10, 50);
+    gfx->setTextColor(0xFFE0);             // Yellow
+    gfx->print("STATUS: ");
+    gfx->setTextColor(0xFFFF);
+    gfx->println(roverStatusMessage.substring(0, 32));
+
+    gfx->setCursor(10, 64);
+    gfx->setTextColor(0x07E0);             // Green
+    gfx->print("EYES: ");
+    gfx->print(eyeLedsState ? "ON" : "OFF");
+    gfx->print(" | LIGHTS: ");
+    gfx->print(headlightState ? "ON" : "OFF");
+    gfx->print(" | AI: ");
+    gfx->setTextColor(isAiSpeaking ? 0xF800 : 0x7BE0);
+    gfx->println(isAiSpeaking ? "TALKING" : "IDLE");
+
+    // 3. Sonar Proximity 4-Way Grid (y: 100 to 235)
+    auto getSonarColor = [](int distCm) -> uint16_t {
+      if (distCm < 15) return 0xF800;      // Red (Danger)
+      if (distCm < 30) return 0xFFE0;      // Yellow (Warning)
+      return 0x07E0;                       // Green (Clear)
+    };
+
+    // Front Sonar Card
+    uint16_t fColor = getSonarColor(sonarFrontCm);
+    gfx->fillRect(110, 100, 100, 40, 0x10A2);
+    gfx->drawRect(110, 100, 100, 40, fColor);
+    gfx->setTextColor(0x9E79); gfx->setTextSize(1);
+    gfx->setCursor(125, 104); gfx->print("^ FRONT ^");
+    gfx->setTextColor(fColor); gfx->setTextSize(2);
+    gfx->setCursor(120, 118);
+    if (sonarFrontCm >= 400) gfx->print("-- cm");
+    else { gfx->print(sonarFrontCm); gfx->print(" cm"); }
+
+    // Rear Sonar Card
+    uint16_t rColor = getSonarColor(sonarRearCm);
+    gfx->fillRect(110, 190, 100, 45, 0x10A2);
+    gfx->drawRect(110, 190, 100, 45, rColor);
+    gfx->setTextColor(0x9E79); gfx->setTextSize(1);
+    gfx->setCursor(125, 194); gfx->print("v REAR v");
+    gfx->setTextColor(rColor); gfx->setTextSize(2);
+    gfx->setCursor(120, 208);
+    if (sonarRearCm >= 400) gfx->print("-- cm");
+    else { gfx->print(sonarRearCm); gfx->print(" cm"); }
+
+    // Left Sonar Card
+    uint16_t lColor = getSonarColor(sonarLeftCm);
+    gfx->fillRect(5, 145, 100, 40, 0x10A2);
+    gfx->drawRect(5, 145, 100, 40, lColor);
+    gfx->setTextColor(0x9E79); gfx->setTextSize(1);
+    gfx->setCursor(20, 149); gfx->print("< LEFT");
+    gfx->setTextColor(lColor); gfx->setTextSize(2);
+    gfx->setCursor(15, 163);
+    if (sonarLeftCm >= 400) gfx->print("-- cm");
+    else { gfx->print(sonarLeftCm); gfx->print(" cm"); }
+
+    // Right Sonar Card
+    uint16_t rtColor = getSonarColor(sonarRightCm);
+    gfx->fillRect(215, 145, 100, 40, 0x10A2);
+    gfx->drawRect(215, 145, 100, 40, rtColor);
+    gfx->setTextColor(0x9E79); gfx->setTextSize(1);
+    gfx->setCursor(230, 149); gfx->print("RIGHT >");
+    gfx->setTextColor(rtColor); gfx->setTextSize(2);
+    gfx->setCursor(225, 163);
+    if (sonarRightCm >= 400) gfx->print("-- cm");
+    else { gfx->print(sonarRightCm); gfx->print(" cm"); }
+  }
+#endif
 }
 
 // =============================================================================
@@ -288,10 +393,20 @@ void drive4WDMotors(int frontLeft, int frontRight, int rearLeft, int rearRight) 
 
 void setMouthState(bool openMouth) {
   mouthState = openMouth;
+  if (openMouth) {
+    setMotorChannel(MOUTH_IN1_PIN, MOUTH_IN2_PIN, MOUTH_ENA_PIN, 200); // Drive Mouth Motor ON (Open)
+  } else {
+    setMotorChannel(MOUTH_IN1_PIN, MOUTH_IN2_PIN, MOUTH_ENA_PIN, 0);   // Stop Mouth Motor (Closed)
+  }
 }
 
 void setBodyMotorState(bool enableBody) {
   bodyMotorState = enableBody;
+  if (enableBody) {
+    setMotorChannel(BODY_IN3_PIN, BODY_IN4_PIN, BODY_ENB_PIN, 200);   // Drive Body Motor ON (Up/Move)
+  } else {
+    setMotorChannel(BODY_IN3_PIN, BODY_IN4_PIN, BODY_ENB_PIN, 0);     // Stop Body Motor
+  }
 }
 
 void setEyeLeds(bool enableEyes) {
@@ -301,7 +416,14 @@ void setEyeLeds(bool enableEyes) {
 
 void setHeadlights(bool enableHeadlights) {
   headlightState = enableHeadlights;
-  digitalWrite(HEADLIGHTS_LED_PIN, enableHeadlights ? HIGH : LOW);
+  analogWrite(HEADLIGHTS_LED_PIN, enableHeadlights ? 255 : 0);
+}
+
+void setHeadlightBrightness(int brightnessPct) {
+  brightnessPct = constrain(brightnessPct, 0, 100);
+  headlightState = (brightnessPct > 0);
+  int pwmVal = map(brightnessPct, 0, 100, 0, 255);
+  analogWrite(HEADLIGHTS_LED_PIN, pwmVal);
 }
 
 // =============================================================================
@@ -465,7 +587,11 @@ void parseSerialCommand(String cmd) {
       roverStatusMessage = "Speed set to " + String(currentSpeed) + "%";
     } else if (payload.startsWith("LED:")) {
       int val = payload.substring(4).toInt();
-      setHeadlights(val == 1);
+      if (val > 1) {
+        setHeadlightBrightness(val); // 0-100% PWM dimming via N-Channel MOSFET
+      } else {
+        setHeadlights(val == 1);
+      }
     } else if (payload.startsWith("PANTILT:")) {
       int firstColon = payload.indexOf(':', 8);
       if (firstColon > 0) {
@@ -538,6 +664,14 @@ void setup() {
   pinMode(REAR_RIGHT_IN4_PIN, OUTPUT);
   pinMode(REAR_RIGHT_ENB_PIN, OUTPUT);
 
+  // Pin modes for 3rd Auxiliary LM298 (Ch A: Mouth Motor, Ch B: Body Motor)
+  pinMode(MOUTH_IN1_PIN, OUTPUT);
+  pinMode(MOUTH_IN2_PIN, OUTPUT);
+  pinMode(MOUTH_ENA_PIN, OUTPUT);
+  pinMode(BODY_IN3_PIN, OUTPUT);
+  pinMode(BODY_IN4_PIN, OUTPUT);
+  pinMode(BODY_ENB_PIN, OUTPUT);
+
   // Pin modes for LEDs & Aux
   pinMode(EYES_LED_PIN, OUTPUT);
   pinMode(HEADLIGHTS_LED_PIN, OUTPUT);
@@ -552,9 +686,13 @@ void setup() {
   pinMode(RIGHT_TRIG_PIN, OUTPUT);
   pinMode(RIGHT_ECHO_PIN, INPUT);
 
-  // Initialize Outputs
+  // Initialize Outputs & Backlight
+  pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, HIGH); // Turn ST7789 backlight ON
   setEyeLeds(true);
   setHeadlights(false);
+  setMouthState(false);
+  setBodyMotorState(false);
   drive4WDMotors(0, 0, 0, 0);
 
 #if HAS_ARDUINO_GFX
@@ -563,12 +701,12 @@ void setup() {
     gfx->fillScreen(0x0000);
     gfx->setTextColor(0xFFFF);
     gfx->setTextSize(2);
-    gfx->setCursor(20, 20);
-    gfx->println("Waveshare 4WD Rover Touch LCD Online");
+    gfx->setCursor(10, 10);
+    gfx->println("WAVEROVER ST7789 ONLINE");
     gfx->setTextSize(1);
-    gfx->setCursor(20, 50);
-    gfx->println("16-Bit RGB Panel Driver Active (800x600)");
-    Serial.println("[RGB Display] Arduino_GFX RGB Panel Driver Initialized Successfully.");
+    gfx->setCursor(10, 35);
+    gfx->println("Waveshare ST7789VW 240x320 IPS 2\"");
+    Serial.println("[ST7789 Display] Arduino_GFX ST7789 Driver Initialized Successfully.");
   }
 #endif
 
@@ -585,7 +723,7 @@ void setup() {
   Serial.println("[Info] High-speed USB CDC Serial active for 4WD Rover.");
 #endif
 
-  Serial.println("[ESP32 4WD Dual LM298 Mobile Rover Firmware Ready with 4x HC-SR04 Sonar]");
+  Serial.println("[ESP32 4WD Dual LM298 Mobile Rover Firmware Ready with ST7789 2\" IPS & 4x HC-SR04 Sonar]");
 }
 
 void loop() {
@@ -606,7 +744,7 @@ void loop() {
   // Update 4 x HC-SR04 Ultrasonic Proximity Sensors
   updateSonarSensors();
   checkRoverObstacleAvoidance();
-  renderTouchLCD7CSonarHUD();
+  renderST7789SonarHUD();
 
   // Periodically stream sonar telemetry every 500ms
   if (millis() - lastSonarStreamTime > 500) {

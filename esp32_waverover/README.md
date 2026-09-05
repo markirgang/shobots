@@ -13,7 +13,7 @@ This document describes the hardware configuration, pinout mapping, Dual LM298 (
 | **Front LM298 Driver** | **Channel A: Front Left Motor | Channel B: Front Right Motor** |
 | **Rear LM298 Driver** | **Channel A: Rear Left Motor | Channel B: Rear Right Motor** |
 | **Ultrasonic Sensors** | **4 x HC-SR04 Proximity Sensors (Front, Rear, Left, Right)** |
-| **TouchLCD Readout** | **Waveshare TouchLCD-7C Live Distance HUD (cm) & AI Tool Integration** |
+| **LCD Readout** | **Waveshare ST7789VW 240x320 IPS 2" Live Telemetry & Proximity HUD** |
 | **Eye LEDs** | **Digital GPIO Output for Animated Eye LEDs** |
 | **Headlights** | **Digital GPIO Output for Front Headlights** |
 | **Pan-Tilt Servos** | **Pan-Tilt Servos (Pan 0-180°, Tilt 0-180°)** |
@@ -55,8 +55,38 @@ The mobile platform uses two LM298 dual motor drivers to power all 4 wheels inde
 | **GPIO 8** | **IN4** | Rear Right Motor | Direction Line 2 |
 | **GPIO 9** | **ENB** | Rear Right Motor | ENB PWM Speed Control |
 
+#### 3. 3rd Auxiliary LM298 Driver Wiring Table (Mouth & Body Actuators)
+| ESP32 Pin | Aux LM298 Pin | Target Actuator | Description / Function |
+| :--- | :--- | :--- | :--- |
+| **GPIO 35** | **IN1** | Mouth Motor | Direction Line 1 (Channel A) |
+| **GPIO 36** | **IN2** | Mouth Motor | Direction Line 2 (Channel A) |
+| **GPIO 37** | **ENA** | Mouth Motor | ENA PWM Speed Control |
+| **GPIO 26** | **IN3** | Body Motor | Direction Line 1 (Channel B) |
+| **GPIO 27** | **IN4** | Body Motor | Direction Line 2 (Channel B) |
+| **GPIO 33** | **ENB** | Body Motor | ENB PWM Speed Control |
+
 > [!IMPORTANT]
-> **Power Isolation**: Do **NOT** power the LM298 motor controllers or DC motors from the ESP32 3.3V pin. Connect an external 6V–12V battery power source to the **VCC (+12V)** terminals of both LM298 drivers and ensure **GND** is common between the ESP32 and both LM298 modules.
+> **Power Isolation**: Do **NOT** power the LM298 motor controllers or DC motors from the ESP32 3.3V pin. Connect an external 6V–12V battery power source to the **VCC (+12V)** terminals of all three LM298 drivers and ensure **GND** is common between the ESP32 and all LM298 modules.
+
+### B. Waveshare ST7789VW 240x320 IPS 2" SPI Display Wiring Table
+| ESP32 Pin | ST7789 Module Pin | Description / Function |
+| :--- | :--- | :--- |
+| **GPIO 47** | **DIN / MOSI** | SPI Data Input |
+| **GPIO 48** | **CLK / SCLK** | SPI Clock Input |
+| **GPIO 46** | **CS** | Chip Select (Active Low) |
+| **GPIO 0** | **DC / RS** | Data / Command Selection |
+| **GPIO 44** | **RST** | Reset (Active Low) |
+| **GPIO 43** | **BL** | Display Backlight Enable |
+| **3.3V** | **VCC** | 3.3V Power Supply |
+### C. N-Channel MOSFET Headlight Driver Wiring Table
+| ESP32 Pin | MOSFET Module Terminal | Target Load | Description / Function |
+| :--- | :--- | :--- | :--- |
+| **GPIO 7** | **SIG** | Gate Control Signal | PWM Dimming / ON-OFF Control Line |
+| **GND** | **GND** | Signal Ground | Common ESP32 Ground |
+| **External V+ (5V/12V)** | **V+ (Power In)** | Power Supply | Main Battery (+5V to +12V) |
+| **External GND** | **V- (Power In)** | Battery Ground | Main Battery Ground (-) |
+| **LED Headlight (+)** | **OUT+** | High-Power Headlight | LED Positive Terminal |
+| **LED Headlight (-)** | **OUT-** | High-Power Headlight | MOSFET Drain Output Terminal |
 
 ---
 
