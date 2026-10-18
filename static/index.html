@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHOBOTS - Master Animatronic & Robotic Control Center</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- App Header & Navigation -->
+    <header class="app-header">
+        <div class="logo-container">
+            <div class="logo-icon">🤖</div>
+            <div class="logo-title">
+                <span class="app-name">SHOBOTS</span>
+                <span class="app-tagline">MASTER ANIMATRONIC & ROBOTIC CONTROL CENTER</span>
+            </div>
+        </div>
+
+        <nav class="top-nav-tabs" id="navTabs">
+            <button class="nav-tab-btn active" data-view="dashboard">🎛️ Control Panel</button>
+            <!-- Dynamic Robot Tabs populated by app.js -->
+        </nav>
+
+        <div class="header-actions">
+            <div class="global-status-badge" id="globalStatusBadge">
+                <span class="status-dot"></span>
+                <span id="globalStatusText">CHECKING...</span>
+            </div>
+            <button class="btn-preset primary" id="btnLaunchAll" title="Launch web pages for all project servers in browser tabs">🌐 Launch All Pages</button>
+            <button class="btn-preset primary" id="btnStartAll" title="Start all configured robot project servers">🚀 Start All</button>
+            <button class="btn-preset danger" id="btnCloseAll" title="Close and shutdown all running robot project servers">🛑 Close All Servers</button>
+            <button class="btn-preset secondary" id="btnResetAllConfig" title="Reset All App Folders, IPs, and Ports to Defaults">↺ Reset Defaults</button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        <!-- VIEW 1: MASTER DASHBOARD CONTROL PANEL -->
+        <div class="view-screen active" id="viewDashboard">
+            <!-- Top Summary Header -->
+            <div class="dashboard-header-banner">
+                <div>
+                    <h1 class="dashboard-title">🎛️ Robot Fleet & App Configuration Overview</h1>
+                    <p class="dashboard-subtitle">Monitor, start, stop, and customize default folder, IP address, and port combinations for all apps.</p>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                    <button class="btn-preset primary" id="btnLaunchAllBanner">🌐 Launch All Web Pages</button>
+                    <button class="btn-preset primary" id="btnStartAllBanner">🚀 Start All Servers</button>
+                    <button class="btn-preset danger" id="btnCloseAllBanner" title="Close and shutdown all running robot project servers">🛑 Close All Servers</button>
+                    <button class="btn-preset secondary" id="btnRefreshStatus">🔄 Refresh Fleet Status</button>
+                </div>
+            </div>
+
+            <!-- Grid of Robot Cards -->
+            <div class="robot-grid" id="robotGrid">
+                <!-- Cards dynamically populated by app.js -->
+            </div>
+
+            <!-- Central Live Frame Switcher Preview Area -->
+            <div class="active-frame-container">
+                <div class="active-frame-header">
+                    <div class="active-frame-title" id="activeFrameTitle">
+                        <span>📱 Live Preview & Interactive Switcher</span>
+                        <span id="activeFrameUrlBadge" class="frame-url-badge">Select a Robot Above</span>
+                    </div>
+                    <div class="active-frame-actions">
+                        <button class="btn-preset" id="btnReloadFrame">🔄 Reload Frame</button>
+                        <button class="btn-preset primary" id="btnOpenNewTab">↗️ Open in New Tab</button>
+                    </div>
+                </div>
+                <div class="active-frame-wrapper">
+                    <iframe id="mainRobotFrame" src="about:blank" title="Robot Control Panel Frame"></iframe>
+                    <div class="frame-placeholder" id="framePlaceholder">
+                        <div class="placeholder-icon">🤖</div>
+                        <h3>Select a Robot from the Cards or Top Tabs</h3>
+                        <p>Click "Open Switcher" on any robot card to launch its live HTML control page directly inside this workbench.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 2: FULLSCREEN SINGLE ROBOT VIEWS -->
+        <div class="view-screen fullscreen-view" id="viewRobotFullscreen">
+            <iframe id="fullscreenFrame" src="about:blank" title="Fullscreen Robot Frame"></iframe>
+        </div>
+    </main>
+
+    <!-- MODAL: APP CONFIGURATION (FOLDER, IP ADDRESS, PORT) -->
+    <div class="modal-backdrop" id="modalConfigBackdrop" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 id="modalConfigTitle">⚙️ Configure App Combination</h2>
+                <button class="modal-close-btn" id="modalConfigClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="cfgAppKey" value="">
+                
+                <div class="form-group">
+                    <label for="cfgAppDir">📁 Default Folder Path:</label>
+                    <input type="text" id="cfgAppDir" class="form-input" placeholder="/home/markirgang/hexapod-app">
+                    <span class="form-hint">Path to directory containing the app's script</span>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label for="cfgAppHost">🌐 IP Address / Host:</label>
+                        <input type="text" id="cfgAppHost" class="form-input" placeholder="127.0.0.1 or localhost or 0.0.0.0">
+                        <span class="form-hint">Binding IP address (e.g., 127.0.0.1, localhost, 0.0.0.0, or custom IP)</span>
+                    </div>
+
+                    <div class="form-group flex-1">
+                        <label for="cfgAppPort">🔌 Port Number:</label>
+                        <input type="number" id="cfgAppPort" class="form-input" placeholder="8090" min="1024" max="65535">
+                        <span class="form-hint">HTTP port for this app</span>
+                    </div>
+                </div>
+
+                <div class="config-defaults-info" id="cfgDefaultsBanner">
+                    <strong>Original Default:</strong> <span id="cfgDefaultText">Loading...</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-preset secondary" id="btnResetSingleConfig">↺ Reset Default</button>
+                <div style="flex:1;"></div>
+                <button class="btn-preset secondary" id="btnCancelConfig">Cancel</button>
+                <button class="btn-preset primary" id="btnSaveConfig">💾 Save & Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+{
+    "hexapod": {
+        "name": "Hexapod Robot",
+        "dir": "/home/markirgang/hexapod-app",
+        "script": "server.py",
+        "host": "127.0.0.1",
+        "port": 8090,
+        "icon": "\ud83d\udd77\ufe0f",
+        "description": "6-Legged Kinematic Hexapod with Gemini AI & Servo Calibration"
+    },
+    "rover": {
+        "name": "4WD Rover",
+        "dir": "/home/markirgang/Rover",
+        "script": "server.py",
+        "host": "127.0.0.1",
+        "port": 9090,
+        "icon": "\ud83c\udfce\ufe0f",
+        "description": "4WD Rover with Robotic Head, MP3 Player & Beat Dance Sync"
+    },
+    "arm": {
+        "name": "Robotic Arm",
+        "dir": "/home/markirgang/Arm",
+        "script": "server.py",
+        "host": "127.0.0.1",
+        "port": 1090,
+        "icon": "\ud83e\uddbe",
+        "description": "6-DOF Servo Robotic Arm Workbench & Kinematics Control"
+    },
+    "birds": {
+        "name": "Animatronic Birds",
+        "dir": "/home/markirgang/Birds",
+        "script": "server.py",
+        "host": "127.0.0.1",
+        "port": 1290,
+        "icon": "\ud83e\udd9c",
+        "description": "Interactive Animatronic Bird Show & Audio Performance Engine"
+    },
+    "menorahfish": {
+        "name": "Menorah Fish",
+        "dir": "/home/markirgang/MenorahFish",
+        "script": "server.py",
+        "host": "127.0.0.1",
+        "port": 1390,
+        "icon": "\ud83d\udc1f",
+        "description": "Musical Menorah Fish Animatronic with WebGL Kinematics"
+    },
+    "drone": {
+        "name": "Pixhawk 4 Drone",
+        "dir": "/home/markirgang/Drone",
+        "script": "server.py",
+        "host": "127.0.0.1",
+        "port": 1190,
+        "icon": "\ud83d\ude81",
+        "description": "Pixhawk 4 Drone Web Server & Multimodal MAVLink Control Hub"
+    },
+    "tello": {
+        "name": "Tello Drone",
+        "dir": "/home/markirgang/Tello",
+        "script": "server.py",
+        "host": "127.0.0.1",
+        "port": 1490,
+        "icon": "🛸",
+        "description": "Tello Drone & Arm Vision Control Workbench"
+    }
+}
