@@ -10,6 +10,7 @@ import time
 import urllib.parse
 import signal
 import threading
+import ssl
 
 PORT = int(os.environ.get("PORT", 7090))
 HOST = os.environ.get("HOST", os.environ.get("IP", "127.0.0.1"))
@@ -244,8 +245,12 @@ def get_all_status():
         port = int(proj["port"])
         online = is_port_open(port, host=host)
         
-        display_host = "localhost" if str(host) in ["127.0.0.1", "0.0.0.0", "", "localhost"] else host
-        url = f"http://{display_host}:{port}"
+        public_url = proj.get("public_url")
+        if public_url:
+            url = public_url
+        else:
+            display_host = "localhost" if str(host) in ["127.0.0.1", "0.0.0.0", "", "localhost"] else host
+            url = f"http://{display_host}:{port}"
 
         def_p = DEFAULT_PROJECTS.get(key, {})
 
@@ -415,6 +420,18 @@ class ShobotsRequestHandler(http.server.SimpleHTTPRequestHandler):
 class ThreadingReusableTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     allow_reuse_address = True
     daemon_threads = True
+    ssl_context = None
+
+    def get_request(self):
+        newsocket, fromaddr = self.socket.accept()
+        if self.ssl_context:
+            try:
+                first_byte = newsocket.recv(1, socket.MSG_PEEK)
+                if first_byte and first_byte[0] == 0x16:
+                    newsocket = self.ssl_context.wrap_socket(newsocket, server_side=True)
+            except Exception:
+                pass
+        return newsocket, fromaddr
 
 if __name__ == "__main__":
     for i in range(1, len(sys.argv)):
@@ -423,13 +440,28 @@ if __name__ == "__main__":
         elif sys.argv[i] == "--host" and i + 1 < len(sys.argv):
             HOST = sys.argv[i + 1]
 
+    cert_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cert.pem")
+    key_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "key.pem")
+    if not (os.path.exists(cert_path) and os.path.exists(key_path)):
+        cert_path = "/home/markirgang/Tweedpump/cert.pem"
+        key_path = "/home/markirgang/Tweedpump/key.pem"
+
+    ssl_ctx = None
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        try:
+            ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
+        except Exception as e:
+            print(f"SSL cert load warning: {e}")
+
     display_host = "localhost" if HOST in ["", "0.0.0.0", "127.0.0.1"] else HOST
-    print(f"Starting SHOBOTS Master Control Center on http://{display_host}:{PORT}")
+    print(f"Starting SHOBOTS Master Control Center on http://{display_host}:{PORT} (http & https supported)")
     print("Auto-starting all configured robot servers...")
     start_all_servers()
     
     bind_host = "" if HOST == "0.0.0.0" else HOST
     with ThreadingReusableTCPServer((bind_host, PORT), ShobotsRequestHandler) as httpd:
+        httpd.ssl_context = ssl_ctx
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

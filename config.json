@@ -5,6 +5,7 @@
         "script": "server.py",
         "host": "127.0.0.1",
         "port": 8090,
+        "public_url": "https://hexapod.shobots.party",
         "icon": "\ud83d\udd77\ufe0f",
         "description": "6-Legged Kinematic Hexapod with Gemini AI & Servo Calibration"
     },
@@ -14,6 +15,7 @@
         "script": "server.py",
         "host": "127.0.0.1",
         "port": 9090,
+        "public_url": "https://rover.shobots.party",
         "icon": "\ud83c\udfce\ufe0f",
         "description": "4WD Rover with Robotic Head, MP3 Player & Beat Dance Sync"
     },
@@ -23,6 +25,7 @@
         "script": "server.py",
         "host": "127.0.0.1",
         "port": 1090,
+        "public_url": "https://arm.shobots.party",
         "icon": "\ud83e\uddbe",
         "description": "6-DOF Servo Robotic Arm Workbench & Kinematics Control"
     },
@@ -32,6 +35,7 @@
         "script": "server.py",
         "host": "127.0.0.1",
         "port": 1290,
+        "public_url": "https://birds.shobots.party",
         "icon": "\ud83e\udd9c",
         "description": "Interactive Animatronic Bird Show & Audio Performance Engine"
     },
@@ -41,6 +45,7 @@
         "script": "server.py",
         "host": "127.0.0.1",
         "port": 1390,
+        "public_url": "https://fish.shobots.party",
         "icon": "\ud83d\udc1f",
         "description": "Musical Menorah Fish Animatronic with WebGL Kinematics"
     },
@@ -50,6 +55,7 @@
         "script": "server.py",
         "host": "127.0.0.1",
         "port": 1190,
+        "public_url": "https://drone.shobots.party",
         "icon": "\ud83d\ude81",
         "description": "Pixhawk 4 Drone Web Server & Multimodal MAVLink Control Hub"
     },
@@ -59,6 +65,7 @@
         "script": "server.py",
         "host": "127.0.0.1",
         "port": 1490,
+        "public_url": "https://tello.shobots.party",
         "icon": "🛸",
         "description": "Tello Drone & Arm Vision Control Workbench"
     }

@@ -158,8 +158,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!navTabsContainer) return;
         
         let html = `
-            <div class="nav-tab-group ${!selectedRobotKey ? 'active' : ''}">
-                <button class="nav-tab-btn ${!selectedRobotKey ? 'active' : ''}" data-view="dashboard">🎛️ Control Panel</button>
+            <div class="nav-tab-group ${!selectedRobotKey && selectedRobotKey !== 'wiring' ? 'active' : ''}">
+                <button class="nav-tab-btn ${!selectedRobotKey && selectedRobotKey !== 'wiring' ? 'active' : ''}" data-view="dashboard">🎛️ Control Panel</button>
+            </div>
+            <div class="nav-tab-group ${selectedRobotKey === 'wiring' ? 'active' : ''}">
+                <button class="nav-tab-btn ${selectedRobotKey === 'wiring' ? 'active' : ''}" data-view="wiring">🔌 Master Wiring & Pinout</button>
             </div>
         `;
 
@@ -188,10 +191,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (targetView === 'dashboard') {
                     selectedRobotKey = null;
+                    document.getElementById('viewWiring').style.display = 'none';
                     viewDashboard.classList.add('active');
                     renderNavTabs();
                     renderRobotGrid();
+                } else if (targetView === 'wiring') {
+                    selectedRobotKey = 'wiring';
+                    viewDashboard.classList.remove('active');
+                    document.getElementById('viewWiring').style.display = 'block';
+                    renderNavTabs();
                 } else if (key) {
+                    selectedRobotKey = key;
+                    document.getElementById('viewWiring').style.display = 'none';
                     viewDashboard.classList.add('active');
                     selectRobotForFrame(key);
                 }
