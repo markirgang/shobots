@@ -158,11 +158,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!navTabsContainer) return;
         
         let html = `
-            <div class="nav-tab-group ${!selectedRobotKey && selectedRobotKey !== 'wiring' ? 'active' : ''}">
-                <button class="nav-tab-btn ${!selectedRobotKey && selectedRobotKey !== 'wiring' ? 'active' : ''}" data-view="dashboard">🎛️ Control Panel</button>
+            <div class="nav-tab-group ${!selectedRobotKey && selectedRobotKey !== 'wiring' && selectedRobotKey !== 'instructions' ? 'active' : ''}">
+                <button class="nav-tab-btn ${!selectedRobotKey && selectedRobotKey !== 'wiring' && selectedRobotKey !== 'instructions' ? 'active' : ''}" data-view="dashboard">🎛️ Control Panel</button>
             </div>
             <div class="nav-tab-group ${selectedRobotKey === 'wiring' ? 'active' : ''}">
                 <button class="nav-tab-btn ${selectedRobotKey === 'wiring' ? 'active' : ''}" data-view="wiring">🔌 Master Wiring & Pinout</button>
+            </div>
+            <div class="nav-tab-group ${selectedRobotKey === 'instructions' ? 'active' : ''}">
+                <button class="nav-tab-btn ${selectedRobotKey === 'instructions' ? 'active' : ''}" data-view="instructions">📖 Guide & Instructions</button>
             </div>
         `;
 
@@ -189,20 +192,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 const targetView = e.currentTarget.dataset.view;
                 const key = e.currentTarget.dataset.key;
 
+                const viewWiring = document.getElementById('viewWiring');
+                const viewInstructions = document.getElementById('viewInstructions');
+
                 if (targetView === 'dashboard') {
                     selectedRobotKey = null;
-                    document.getElementById('viewWiring').style.display = 'none';
+                    if (viewWiring) viewWiring.style.display = 'none';
+                    if (viewInstructions) viewInstructions.style.display = 'none';
                     viewDashboard.classList.add('active');
                     renderNavTabs();
                     renderRobotGrid();
                 } else if (targetView === 'wiring') {
                     selectedRobotKey = 'wiring';
                     viewDashboard.classList.remove('active');
-                    document.getElementById('viewWiring').style.display = 'block';
+                    if (viewInstructions) viewInstructions.style.display = 'none';
+                    if (viewWiring) viewWiring.style.display = 'block';
+                    renderNavTabs();
+                } else if (targetView === 'instructions') {
+                    selectedRobotKey = 'instructions';
+                    viewDashboard.classList.remove('active');
+                    if (viewWiring) viewWiring.style.display = 'none';
+                    if (viewInstructions) viewInstructions.style.display = 'block';
                     renderNavTabs();
                 } else if (key) {
                     selectedRobotKey = key;
-                    document.getElementById('viewWiring').style.display = 'none';
+                    if (viewWiring) viewWiring.style.display = 'none';
+                    if (viewInstructions) viewInstructions.style.display = 'none';
                     viewDashboard.classList.add('active');
                     selectRobotForFrame(key);
                 }

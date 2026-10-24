@@ -204,6 +204,96 @@
                 </table>
             </div>
         </div>
+
+        <!-- VIEW 4: MASTER FLEET OPERATING MANUAL & USER GUIDE -->
+        <div class="view-screen" id="viewInstructions" style="display:none; padding:20px;">
+            <div class="dashboard-header-banner" style="margin-bottom:20px;">
+                <div>
+                    <h1 class="dashboard-title">📖 Shobots Master Fleet Operating Manual & Instructions</h1>
+                    <p class="dashboard-subtitle">Central management guide for controlling all robot project servers, configuring network combinations, and operating multimodal AI UIs.</p>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap:20px;">
+                <!-- Step 1 -->
+                <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--panel-border); border-radius: 12px; padding: 20px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                        <span style="background:var(--accent-cyan); color:#000; font-weight:bold; padding:4px 10px; border-radius:6px; font-size:0.8rem;">Step 1</span>
+                        <h3 style="color:#fff; font-size:1.05rem;">🚀 Launch & Control Robot Fleet Servers</h3>
+                    </div>
+                    <ul style="color:var(--text-muted); font-size:0.85rem; line-height:1.7; padding-left:18px;">
+                        <li><strong>Start All Servers:</strong> Click <strong style="color:var(--accent-cyan);">🚀 Start All</strong> in the header to spin up all configured robot app background processes (Rover, Hexapod, Arm, Birds, Fish, Drones, Tweedpump).</li>
+                        <li><strong>Individual Control:</strong> Use individual <strong style="color:var(--accent-green);">▶ Start</strong> and <strong style="color:var(--accent-red);">⏹ Stop</strong> buttons on each robot card.</li>
+                        <li><strong>Launch All Web Pages:</strong> Click <strong style="color:var(--accent-cyan);">🌐 Launch All Pages</strong> to open each robot's web UI in separate browser tabs.</li>
+                    </ul>
+                </div>
+
+                <!-- Step 2 -->
+                <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--panel-border); border-radius: 12px; padding: 20px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                        <span style="background:var(--accent-cyan); color:#000; font-weight:bold; padding:4px 10px; border-radius:6px; font-size:0.8rem;">Step 2</span>
+                        <h3 style="color:#fff; font-size:1.05rem;">⚙️ Customize Combination Settings</h3>
+                    </div>
+                    <ul style="color:var(--text-muted); font-size:0.85rem; line-height:1.7; padding-left:18px;">
+                        <li><strong>Configure Folder Path & IP/Port:</strong> Click <strong style="color:var(--accent-yellow);">⚙️ Configure Combination</strong> on any robot card to customize its root directory, IP address binding, or HTTP port.</li>
+                        <li><strong>Live Restart:</strong> Saving changes automatically restarts that specific robot server with its new parameters.</li>
+                        <li><strong>Reset Defaults:</strong> Click <strong style="color:var(--accent-orange);">↺ Reset Defaults</strong> anytime to restore factory default directories, IP hosts, and ports.</li>
+                    </ul>
+                </div>
+
+                <!-- Step 3 -->
+                <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--panel-border); border-radius: 12px; padding: 20px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                        <span style="background:var(--accent-cyan); color:#000; font-weight:bold; padding:4px 10px; border-radius:6px; font-size:0.8rem;">Step 3</span>
+                        <h3 style="color:#fff; font-size:1.05rem;">🌐 Interactive Live Frame Switcher</h3>
+                    </div>
+                    <ul style="color:var(--text-muted); font-size:0.85rem; line-height:1.7; padding-left:18px;">
+                        <li><strong>Embedded Live Control:</strong> Click <strong style="color:var(--accent-cyan);">🌐 Open Switcher</strong> or click any robot tab at the top bar to load its full 3D interactive web page directly inside Shobots.</li>
+                        <li><strong>Quick Actions:</strong> Use <strong style="color:#fff;">🔄 Reload Frame</strong> or <strong style="color:var(--accent-cyan);">↗️ Open in New Tab</strong> to manage embedded web previews seamlessly.</li>
+                        <li><strong>Realtime Status:</strong> The status pills continuously ping each server to verify health.</li>
+                    </ul>
+                </div>
+
+                <!-- Step 4 -->
+                <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--panel-border); border-radius: 12px; padding: 20px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                        <span style="background:var(--accent-cyan); color:#000; font-weight:bold; padding:4px 10px; border-radius:6px; font-size:0.8rem;">Step 4</span>
+                        <h3 style="color:#fff; font-size:1.05rem;">🔌 Master Pinout & Hardware Matrix</h3>
+                    </div>
+                    <ul style="color:var(--text-muted); font-size:0.85rem; line-height:1.7; padding-left:18px;">
+                        <li><strong>Raspberry Pi GPIO Pinout:</strong> Navigate to <strong style="color:var(--accent-cyan);">🔌 Master Wiring & Pinout</strong> view to review the complete 40-pin GPIO pinout matrix.</li>
+                        <li><strong>I2C Bus & Addresses:</strong> Review I2C address allocations (0x40 for Arm/Birds/Fish, 0x41 for Hexapod).</li>
+                        <li><strong>L298 Drivers & Motors:</strong> Check GPIO PWM assignments for DC motor drivers, relays, and ultrasonic sensors.</li>
+                    </ul>
+                </div>
+
+                <!-- Step 5 -->
+                <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--panel-border); border-radius: 12px; padding: 20px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                        <span style="background:var(--accent-cyan); color:#000; font-weight:bold; padding:4px 10px; border-radius:6px; font-size:0.8rem;">Step 5</span>
+                        <h3 style="color:#fff; font-size:1.05rem;">🤖 Gemini AI Multimodal Agent</h3>
+                    </div>
+                    <ul style="color:var(--text-muted); font-size:0.85rem; line-height:1.7; padding-left:18px;">
+                        <li><strong>API Key Entry:</strong> Supply your Google Gemini API key in any connected robot UI's settings panel.</li>
+                        <li><strong>Voice Commands:</strong> Activate microphone for hands-free natural language robot control and dancing routines.</li>
+                        <li><strong>Multimodal Vision:</strong> Use camera feeds with Gemini vision model for realtime scene analysis and object detection.</li>
+                    </ul>
+                </div>
+
+                <!-- Step 6 -->
+                <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--panel-border); border-radius: 12px; padding: 20px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                        <span style="background:var(--accent-cyan); color:#000; font-weight:bold; padding:4px 10px; border-radius:6px; font-size:0.8rem;">Step 6</span>
+                        <h3 style="color:#fff; font-size:1.05rem;">🛡️ Safety & System Maintenance</h3>
+                    </div>
+                    <ul style="color:var(--text-muted); font-size:0.85rem; line-height:1.7; padding-left:18px;">
+                        <li><strong>Shutdown All:</strong> Click <strong style="color:var(--accent-red);">🛑 Close All Servers</strong> before powering down hardware.</li>
+                        <li><strong>Power Supply:</strong> Ensure high-current UBEC 5V power supply grounds are common with Raspberry Pi GND.</li>
+                        <li><strong>Emergency Stop:</strong> Use individual project emergency stop buttons if motor stall or collision occurs.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- MODAL: APP CONFIGURATION (FOLDER, IP ADDRESS, PORT) -->
