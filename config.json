@@ -68,5 +68,15 @@
         "public_url": "https://tello.shobots.party",
         "icon": "🛸",
         "description": "Tello Drone & Arm Vision Control Workbench"
+    },
+    "deerhead": {
+        "name": "Animatronic Deerhead",
+        "dir": "/home/markirgang/Deerhead",
+        "script": "server.py",
+        "host": "127.0.0.1",
+        "port": 1590,
+        "public_url": "https://deerhead.shobots.party",
+        "icon": "🦌",
+        "description": "Wall-Mounted Gemmy Animated Trophy Deerhead ('Buck') with Gemini AI & Singing Sync"
     }
 }
