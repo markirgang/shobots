@@ -93,6 +93,26 @@ DEFAULT_PROJECTS = {
         "icon": "🦌",
         "public_url": "https://deerhead.shobots.party",
         "description": "Wall-Mounted Gemmy Animated Trophy Deerhead ('Buck') with Gemini AI & Singing Sync"
+    },
+    "parrot": {
+        "name": "Gemmy AI Parrot Stage",
+        "dir": "/home/markirgang/Parrot",
+        "script": "server.py",
+        "host": "127.0.0.1",
+        "port": 1890,
+        "icon": "🦜",
+        "public_url": "https://parrot.shobots.party",
+        "description": "Raspberry Pi 5 Gemmy AI Animatronic Parrot Stage with Gemini Voice, L298N Motors, Servos, Spotlight & MP3 Dance Sync"
+    },
+    "bear": {
+        "name": "Gemmy AI Dancing Bear Stage",
+        "dir": "/home/markirgang/Bear",
+        "script": "server.py",
+        "host": "127.0.0.1",
+        "port": 1990,
+        "icon": "🐻",
+        "public_url": "https://bear.shobots.party",
+        "description": "Raspberry Pi 5 Gemmy Talking Dancing Bear Animatronic Stage Controller with Gemini Voice & MP3 Dance Sync"
     }
 }
 
